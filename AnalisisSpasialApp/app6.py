@@ -6,20 +6,24 @@ import os
 import zipfile
 
 # Terapkan caching untuk fungsi yang memuat data GeoPandas
-# Sekarang fungsi ini menerima file yang diunggah itu sendiri sebagai argumen
-# Ini akan membuat cache key unik untuk setiap file yang diunggah
 @st.cache_data
 def load_geodataframe_from_zip(uploaded_file, upload_dir):
     """Fungsi untuk memuat GeoDataFrame dari file ZIP yang diunggah."""
     try:
-        # Simpan dan ekstrak file
+        # Hapus konten folder unggahan sebelumnya untuk menghindari konflik
+        if os.path.exists(upload_dir):
+            for file in os.listdir(upload_dir):
+                os.remove(os.path.join(upload_dir, file))
+        else:
+            os.makedirs(upload_dir, exist_ok=True)
+            
+        # Simpan dan ekstrak file yang baru diunggah
         zip_path = os.path.join(upload_dir, uploaded_file.name)
         with open(zip_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(upload_dir)
         
-        # Cari file .shp di dalam folder yang diekstrak
         shp_files = [f for f in os.listdir(upload_dir) if f.endswith(".shp")]
         if not shp_files:
             return None, "Tidak ada file .shp dalam ZIP"
@@ -37,6 +41,11 @@ st.title("🗺️ Analisis Spasial - Overlay Luasan")
 # === Jalur yang disesuaikan untuk GitHub dan lokal ===
 script_dir = os.path.dirname(os.path.abspath(__file__))
 REFERENSI_DIR = os.path.join(script_dir, "referensi")
+
+# Tambahkan tombol untuk membersihkan cache
+if st.button("Bersihkan Cache dan Muat Ulang"):
+    st.cache_data.clear()
+    st.experimental_rerun()
 
 # === Input widget utama ===
 uploaded_file = st.file_uploader("Upload Shapefile Tapak Proyek (ZIP)", type="zip")
@@ -72,7 +81,6 @@ basemap_choice = st.selectbox("Pilih Basemap", list(basemap_options.keys()))
 # === Plotting dan analisis hanya akan berjalan jika file diunggah ===
 if uploaded_file is not None:
     upload_dir = "uploads"
-    os.makedirs(upload_dir, exist_ok=True)
     
     # Panggil fungsi cached dengan file_uploader sebagai input
     tapak, error_tapak = load_geodataframe_from_zip(uploaded_file, upload_dir)
@@ -119,7 +127,6 @@ if uploaded_file is not None:
 
         st.subheader("📊 Hasil Luasan")
         
-        # Perbaikan format angka untuk luas
         luas_tapak_str = f"{tapak['luas_m2'].sum():,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
         luas_overlay_str = f"{overlay['luas_m2'].sum():,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
         
