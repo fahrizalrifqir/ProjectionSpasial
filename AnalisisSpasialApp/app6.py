@@ -11,7 +11,9 @@ import pandas as pd
 st.set_page_config(page_title="Analisis Spasial Interaktif", layout="wide")
 st.title("🌍 Analisis Spasial Interaktif")
 
-# --- Upload Shapefile/KML/KMZ Proyek ---
+# ===============================
+# Upload Shapefile/KML/KMZ Proyek
+# ===============================
 st.subheader("📂 Upload Shapefile Proyek (ZIP), KML, atau KMZ")
 
 uploaded_files = st.file_uploader(
@@ -74,24 +76,24 @@ if uploaded_files:
                             st.error(f"❌ Format {ext} belum didukung")
                             continue
 
+                        # Tambahkan kolom sumber
                         gdf["source_file"] = uploaded_file.name
                         all_gdfs.append(gdf)
 
-                        # --- Info konversi ---
+                        # --- Info ringkasan ---
                         st.markdown(f"### 📂 Konversi ke Shapefile")
                         geom_summary = gdf.geometry.geom_type.value_counts().to_dict()
                         for geom, count in geom_summary.items():
                             st.write(f"- {geom}: {count} fitur")
-
                         st.success(f"✅ {uploaded_file.name} berhasil diproses")
 
-                        # --- Pilihan zona UTM ---
+                        # --- Pilihan zona UTM & belahan ---
                         st.markdown("**📐 Hitung Luas (m² dan Ha)**")
                         col1, col2 = st.columns(2)
                         with col1:
                             utm_zone = st.number_input("Zona UTM", min_value=1, max_value=60, value=48)
                         with col2:
-                            hemisphere = st.selectbox("Belahan", ["S", "N"])  # default S untuk Indonesia
+                            hemisphere = st.selectbox("Belahan", ["S", "N"], index=0)
 
                         if hemisphere == "N":
                             utm_crs = f"EPSG:326{utm_zone:02d}"
@@ -106,7 +108,7 @@ if uploaded_files:
                         except Exception as e:
                             st.warning(f"⚠️ Gagal menghitung luas: {e}")
 
-                        # --- Simpan hasil per geometry ---
+                        # --- Simpan hasil shapefile per tipe geometry ---
                         geom_types = {
                             "polygon": ["Polygon", "MultiPolygon"],
                             "line": ["LineString", "MultiLineString"],
@@ -167,11 +169,12 @@ if uploaded_files:
                 mime="application/zip"
             )
 
-# --- Folder Referensi ---
+# ===============================
+# Upload Shapefile Referensi
+# ===============================
 st.subheader("📂 Shapefile Referensi")
 REFERENSI_DIR = "referensi"
-if not os.path.exists(REFERENSI_DIR):
-    os.makedirs(REFERENSI_DIR)
+os.makedirs(REFERENSI_DIR, exist_ok=True)
 
 uploaded_ref = st.file_uploader("Upload Shapefile Referensi (ZIP)", type="zip", key="ref")
 if uploaded_ref:
@@ -192,7 +195,9 @@ for ref_file in selected_refs:
     if os.path.exists(ref_path):
         gdf_refs.append(gpd.read_file(ref_path))
 
-# --- Hitung overlap luas dengan referensi ---
+# ===============================
+# Hitung overlap dengan referensi
+# ===============================
 if all_gdfs and gdf_refs:
     st.markdown("### 📐 Luas Overlap dengan Referensi")
     gdf_proyek = gpd.GeoDataFrame(pd.concat(all_gdfs, ignore_index=True), crs=all_gdfs[0].crs)
@@ -203,7 +208,6 @@ if all_gdfs and gdf_refs:
                 gdf_ref = gdf_ref.to_crs(gdf_proyek.crs)
             overlap = gpd.overlay(gdf_proyek, gdf_ref, how="intersection")
             if not overlap.empty:
-                # gunakan UTM dari pilihan user (default zona 48S)
                 utm_zone = 48
                 hemisphere = "S"
                 utm_crs = f"EPSG:{326 if hemisphere=='N' else 327}{utm_zone:02d}"
@@ -217,24 +221,25 @@ if all_gdfs and gdf_refs:
         except Exception as e:
             st.warning(f"⚠️ Gagal menghitung overlap dengan {selected_refs[i]}: {e}")
 
-# --- Pilih Basemap ---
-st.subheader("🗺️ Pilih Basemap")
-basemap_choice = st.selectbox(
-    "Pilih jenis basemap",
-    ["OpenStreetMap", "CartoDB Positron", "CartoDB DarkMatter", "Esri Satellite"]
-)
-
-# --- Peta Interaktif ---
+# ===============================
+# Peta Interaktif
+# ===============================
 if all_gdfs:
     gdf_proyek = gpd.GeoDataFrame(pd.concat(all_gdfs, ignore_index=True), crs=all_gdfs[0].crs)
-    gdf_centroid = gdf_proyek.to_crs(epsg=4326).geometry.centroid
-    center = [gdf_centroid.y.mean(), gdf_centroid.x.mean()]
+
+    # Hitung bounding box untuk zoom otomatis
+    bounds = gdf_proyek.to_crs(epsg=4326).total_bounds  # [minx, miny, maxx, maxy]
+    center = [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2]
+
+    st.subheader("🗺️ Peta Interaktif")
+    basemap_choice = st.selectbox(
+        "Pilih basemap",
+        ["OpenStreetMap", "CartoDB Positron", "CartoDB DarkMatter", "Esri Satellite"]
+    )
 
     m = folium.Map(location=center, zoom_start=8)
 
-    if basemap_choice == "OpenStreetMap":
-        folium.TileLayer("OpenStreetMap").add_to(m)
-    elif basemap_choice == "CartoDB Positron":
+    if basemap_choice == "CartoDB Positron":
         folium.TileLayer("CartoDB positron").add_to(m)
     elif basemap_choice == "CartoDB DarkMatter":
         folium.TileLayer("CartoDB dark_matter").add_to(m)
@@ -246,15 +251,17 @@ if all_gdfs:
             overlay=False,
             control=True
         ).add_to(m)
+    else:
+        folium.TileLayer("OpenStreetMap").add_to(m)
 
-    # Layer proyek
+    # Tambahkan layer proyek
     folium.GeoJson(
         gdf_proyek.to_crs(epsg=4326),
         name="Proyek",
         style_function=lambda x: {"color": "purple", "fillOpacity": 0.5},
     ).add_to(m)
 
-    # Layer referensi
+    # Tambahkan layer referensi
     for i, gdf_ref in enumerate(gdf_refs):
         folium.GeoJson(
             gdf_ref.to_crs(epsg=4326),
@@ -262,8 +269,8 @@ if all_gdfs:
             style_function=lambda x: {"color": "gray", "fillOpacity": 0},
         ).add_to(m)
 
+    # Zoom otomatis ke extent proyek
+    m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+
     folium.LayerControl().add_to(m)
-
-    st.subheader("🗺️ Peta Interaktif")
     st_folium(m, width=900, height=600)
-
