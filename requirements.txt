@@ -1,9 +1,9 @@
 streamlit
 geopandas
+shapely
+fiona
+pyproj
+rtree
 folium
 streamlit-folium
-shapely
-pyproj
-fiona
-matplotlib
-contextily
+pandas
