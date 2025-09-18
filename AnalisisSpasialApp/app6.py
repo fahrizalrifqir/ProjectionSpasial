@@ -5,18 +5,26 @@ import contextily as ctx
 import os
 import zipfile
 
-# Folder referensi
-REFERENSI_DIR = r"F:\AnalisisSpasialApp\referensi"
-
 st.title("🗺️ Analisis Spasial - Overlay Luasan")
+
+# === Ubah jalur absolut ke jalur relatif ===
+# Jalur relatif ke folder 'referensi' di dalam direktori aplikasi.
+# Ini akan berfungsi di Streamlit Cloud (Linux) dan di komputer lokal Anda (Windows).
+REFERENSI_DIR = "AnalisisSpasialApp/referensi"
 
 # === Upload shapefile proyek ===
 uploaded_file = st.file_uploader("Upload Shapefile Tapak Proyek (ZIP)", type="zip")
 
 # === Pilih shapefile referensi dari folder ===
-referensi_files = [f for f in os.listdir(REFERENSI_DIR) if f.endswith(".shp")]
-referensi_choice = st.selectbox("Pilih Shapefile Referensi", referensi_files)
-REFERENSI_PATH = os.path.join(REFERENSI_DIR, referensi_choice)
+try:
+    referensi_files = [f for f in os.listdir(REFERENSI_DIR) if f.endswith(".shp")]
+    if not referensi_files:
+        st.warning("Folder referensi kosong atau tidak ditemukan file .shp.")
+    referensi_choice = st.selectbox("Pilih Shapefile Referensi", referensi_files)
+    REFERENSI_PATH = os.path.join(REFERENSI_DIR, referensi_choice)
+except FileNotFoundError:
+    st.error(f"❌ Folder 'referensi' tidak ditemukan di jalur: {REFERENSI_DIR}")
+    st.stop() # Hentikan eksekusi jika folder tidak ditemukan
 
 # === Input zona UTM dan hemisphere ===
 zona = st.number_input("Masukkan zona UTM (46 - 54)", min_value=46, max_value=54, value=50)
@@ -58,7 +66,7 @@ if uploaded_file is not None:
         referensi = gpd.read_file(REFERENSI_PATH)
 
         # === Proyeksi ke UTM sesuai input user ===
-        epsg_code = f"326{zona}" if hemisphere == "Utara" else f"327{zona}"
+        epsg_code = f"326{zona}" if hemisphere == "N" else f"327{zona}"
         tapak = tapak.to_crs(epsg=epsg_code)
         referensi = referensi.to_crs(epsg=epsg_code)
 
@@ -88,4 +96,3 @@ if uploaded_file is not None:
         ax.legend()
         ax.set_title("Peta Overlay (Zoom ke Tapak)", fontsize=14)
         st.pyplot(fig)
-#python -m streamlit run F:\AnalisisSpasialApp\app6.py
