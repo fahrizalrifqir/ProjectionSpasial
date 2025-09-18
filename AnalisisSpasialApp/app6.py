@@ -80,6 +80,24 @@ else:
 st.info(f"EPSG yang dipakai: **{epsg_code}**")
 
 # =========================
+# Pilihan Basemap
+# =========================
+st.subheader("🗺️ Pilih Basemap")
+basemap_choice = st.selectbox(
+    "Pilih jenis basemap",
+    ["OpenStreetMap", "CartoDB Positron", "CartoDB DarkMatter", "Esri Satellite", "Esri World Imagery"]
+)
+
+# Mapping pilihan ke Folium
+basemap_dict = {
+    "OpenStreetMap": "OpenStreetMap",
+    "CartoDB Positron": "CartoDB positron",
+    "CartoDB DarkMatter": "CartoDB dark_matter",
+    "Esri Satellite": "Esri Satellite",
+    "Esri World Imagery": "Esri.WorldImagery"
+}
+
+# =========================
 # Peta Interaktif Folium
 # =========================
 if gdf_proyek is not None:
@@ -89,7 +107,7 @@ if gdf_proyek is not None:
     gdf_centroid = gdf_proyek.to_crs(epsg=4326).geometry.centroid
     center = [gdf_centroid.y.mean(), gdf_centroid.x.mean()]
 
-    m = folium.Map(location=center, zoom_start=12, tiles="CartoDB positron")
+    m = folium.Map(location=center, zoom_start=12, tiles=basemap_dict[basemap_choice])
 
     # Tambahkan proyek
     proyek_fields = [c for c in gdf_proyek.columns if c != "geometry"]
