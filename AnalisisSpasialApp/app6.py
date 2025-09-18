@@ -9,11 +9,10 @@ from io import BytesIO
 import pandas as pd
 
 st.set_page_config(page_title="Analisis Spasial Interaktif", layout="wide")
-st.title("🌍 Analisis Spasial Interaktif")
+st.title("🌍 Analisis Spasial Interaktif (Optimasi RAM)")
 
-# --- Upload Shapefile/KML/KMZ Proyek ---
+# --- Upload Proyek ---
 st.subheader("📂 Upload Shapefile Proyek (ZIP), KML, atau KMZ")
-
 uploaded_files = st.file_uploader(
     "Upload file .zip (shapefile), .kml, atau .kmz (bisa lebih dari 1)",
     type=["zip", "kml", "kmz"],
@@ -21,153 +20,53 @@ uploaded_files = st.file_uploader(
 )
 
 all_gdfs = []
-per_shp_zips = []
-per_file_zips = []
-all_zip_buffer = BytesIO()
-
 if uploaded_files:
-    with tempfile.TemporaryDirectory() as shpdir:
-        with zipfile.ZipFile(all_zip_buffer, "w") as zf_all:
-            for uploaded_file in uploaded_files:
-                fname, ext = os.path.splitext(uploaded_file.name)
-                ext = ext.lower()
-                try:
-                    with tempfile.TemporaryDirectory() as tmpdir:
-                        # --- ZIP ---
-                        if ext == ".zip":
-                            zip_path = os.path.join(tmpdir, uploaded_file.name)
-                            with open(zip_path, "wb") as f:
-                                f.write(uploaded_file.read())
-                            with zipfile.ZipFile(zip_path, "r") as zip_ref:
-                                zip_ref.extractall(tmpdir)
-                            shp_files = [f for f in os.listdir(tmpdir) if f.endswith(".shp")]
-                            if not shp_files:
-                                st.error(f"❌ Tidak ada .shp di {uploaded_file.name}")
-                                continue
-                            gdf = gpd.read_file(os.path.join(tmpdir, shp_files[0]))
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for uploaded_file in uploaded_files:
+            fname, ext = os.path.splitext(uploaded_file.name)
+            ext = ext.lower()
+            try:
+                if ext == ".zip":
+                    zip_path = os.path.join(tmpdir, uploaded_file.name)
+                    with open(zip_path, "wb") as f:
+                        f.write(uploaded_file.read())
+                    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                        zip_ref.extractall(tmpdir)
+                    shp_files = [f for f in os.listdir(tmpdir) if f.endswith(".shp")]
+                    if not shp_files:
+                        st.error(f"❌ Tidak ada .shp di {uploaded_file.name}")
+                        continue
+                    gdf = gpd.read_file(os.path.join(tmpdir, shp_files[0]))
 
-                        # --- KML ---
-                        elif ext == ".kml":
-                            kml_path = os.path.join(tmpdir, uploaded_file.name)
-                            with open(kml_path, "wb") as f:
-                                f.write(uploaded_file.read())
-                            gdf = gpd.read_file(kml_path, driver="KML")
+                elif ext == ".kml":
+                    kml_path = os.path.join(tmpdir, uploaded_file.name)
+                    with open(kml_path, "wb") as f:
+                        f.write(uploaded_file.read())
+                    gdf = gpd.read_file(kml_path, driver="KML")
 
-                        # --- KMZ ---
-                        elif ext == ".kmz":
-                            kmz_path = os.path.join(tmpdir, uploaded_file.name)
-                            with open(kmz_path, "wb") as f:
-                                f.write(uploaded_file.read())
+                elif ext == ".kmz":
+                    kmz_path = os.path.join(tmpdir, uploaded_file.name)
+                    with open(kmz_path, "wb") as f:
+                        f.write(uploaded_file.read())
+                    with zipfile.ZipFile(kmz_path, "r") as kmz_ref:
+                        kmz_ref.extractall(tmpdir)
+                    kml_files = [f for f in os.listdir(tmpdir) if f.endswith(".kml")]
+                    if not kml_files:
+                        st.error(f"❌ Tidak ada .kml dalam {uploaded_file.name}")
+                        continue
+                    gdf = gpd.read_file(os.path.join(tmpdir, kml_files[0]), driver="KML")
+                else:
+                    st.error(f"❌ Format {ext} belum didukung")
+                    continue
 
-                            try:
-                                with zipfile.ZipFile(kmz_path, "r") as kmz_ref:
-                                    kmz_ref.extractall(tmpdir)
-                                kml_files = [f for f in os.listdir(tmpdir) if f.endswith(".kml")]
-                                if not kml_files:
-                                    st.error(f"❌ Tidak ada .kml dalam {uploaded_file.name}")
-                                    continue
-                                gdf = gpd.read_file(os.path.join(tmpdir, kml_files[0]), driver="KML")
-                            except zipfile.BadZipFile:
-                                st.error(f"❌ {uploaded_file.name} bukan KMZ yang valid (ZIP error)")
-                                continue
-                        else:
-                            st.error(f"❌ Format {ext} belum didukung")
-                            continue
+                gdf["source_file"] = uploaded_file.name
+                all_gdfs.append(gdf)
+                st.success(f"✅ {uploaded_file.name} berhasil diproses")
 
-                        gdf["source_file"] = uploaded_file.name
-                        all_gdfs.append(gdf)
+            except Exception as e:
+                st.error(f"❌ Gagal memproses {uploaded_file.name}: {e}")
 
-                        # --- Info konversi ---
-                        st.markdown(f"### 📂 Konversi ke Shapefile")
-                        geom_summary = gdf.geometry.geom_type.value_counts().to_dict()
-                        for geom, count in geom_summary.items():
-                            st.write(f"- {geom}: {count} fitur")
-
-                        st.success(f"✅ {uploaded_file.name} berhasil diproses")
-
-                        # --- Pilihan zona UTM ---
-                        st.markdown("**📐 Hitung Luas (m² dan Ha)**")
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            utm_zone = st.number_input("Zona UTM", min_value=1, max_value=60, value=48)
-                        with col2:
-                            hemisphere = st.selectbox("Belahan", ["S", "N"])  # default S untuk Indonesia
-
-                        if hemisphere == "N":
-                            utm_crs = f"EPSG:326{utm_zone:02d}"
-                        else:
-                            utm_crs = f"EPSG:327{utm_zone:02d}"
-
-                        try:
-                            gdf_utm = gdf.to_crs(utm_crs)
-                            gdf["Luas_m2"] = gdf_utm.area
-                            gdf["Luas_Ha"] = gdf["Luas_m2"] / 10000
-                            st.dataframe(gdf[["source_file", "Luas_m2", "Luas_Ha"]])
-                        except Exception as e:
-                            st.warning(f"⚠️ Gagal menghitung luas: {e}")
-
-                        # --- Simpan hasil per geometry ---
-                        geom_types = {
-                            "polygon": ["Polygon", "MultiPolygon"],
-                            "line": ["LineString", "MultiLineString"],
-                            "point": ["Point", "MultiPoint"],
-                        }
-
-                        file_zip_buffer = BytesIO()
-                        with zipfile.ZipFile(file_zip_buffer, "w") as zf_file:
-                            for gname, gtypes in geom_types.items():
-                                gdf_sub = gdf[gdf.geometry.geom_type.isin(gtypes)]
-                                if not gdf_sub.empty:
-                                    shp_path = os.path.join(shpdir, f"{fname}_{gname}.shp")
-                                    gdf_sub.to_file(shp_path)
-
-                                    shp_zip_buffer = BytesIO()
-                                    with zipfile.ZipFile(shp_zip_buffer, "w") as zf_shp:
-                                        for f in os.listdir(shpdir):
-                                            if f.startswith(f"{fname}_{gname}."):
-                                                file_path = os.path.join(shpdir, f)
-                                                zf_shp.write(file_path, arcname=f)
-                                                zf_file.write(file_path, arcname=f)
-                                                zf_all.write(file_path, arcname=f)
-
-                                    per_shp_zips.append((f"{fname}_{gname}", shp_zip_buffer.getvalue()))
-
-                            per_file_zips.append((fname, file_zip_buffer.getvalue()))
-
-                except Exception as e:
-                    st.error(f"❌ Gagal memproses {uploaded_file.name}: {e}")
-
-    # --- Download hasil ---
-    st.subheader("📥 Download Hasil")
-
-    with st.expander("📦 Download Per Shapefile", expanded=False):
-        for shp_name, shp_zip in per_shp_zips:
-            st.download_button(
-                label=f"⬇️ {shp_name}.zip",
-                data=shp_zip,
-                file_name=f"{shp_name}.zip",
-                mime="application/zip"
-            )
-
-    with st.expander("📂 Download Per File", expanded=False):
-        for fname, file_zip in per_file_zips:
-            st.download_button(
-                label=f"⬇️ {fname}.zip",
-                data=file_zip,
-                file_name=f"{fname}.zip",
-                mime="application/zip"
-            )
-
-    if len(uploaded_files) > 1:
-        with st.expander("📦 Download Semua Sekaligus", expanded=False):
-            st.download_button(
-                label="⬇️ Download all_files.zip",
-                data=all_zip_buffer.getvalue(),
-                file_name="all_files.zip",
-                mime="application/zip"
-            )
-
-# --- Folder Referensi ---
+# --- Upload Shapefile Referensi ---
 st.subheader("📂 Shapefile Referensi")
 REFERENSI_DIR = "referensi"
 if not os.path.exists(REFERENSI_DIR):
@@ -192,69 +91,52 @@ for ref_file in selected_refs:
     if os.path.exists(ref_path):
         gdf_refs.append(gpd.read_file(ref_path))
 
-# --- Hitung overlap luas dengan referensi ---
-if all_gdfs and gdf_refs:
-    st.markdown("### 📐 Luas Overlap dengan Referensi")
-    gdf_proyek = gpd.GeoDataFrame(pd.concat(all_gdfs, ignore_index=True), crs=all_gdfs[0].crs)
-    for i, gdf_ref in enumerate(gdf_refs):
-        try:
-            # samakan CRS
-            if gdf_ref.crs != gdf_proyek.crs:
-                gdf_ref = gdf_ref.to_crs(gdf_proyek.crs)
-            overlap = gpd.overlay(gdf_proyek, gdf_ref, how="intersection")
-            if not overlap.empty:
-                # gunakan UTM dari pilihan user (default zona 48S)
-                utm_zone = 48
-                hemisphere = "S"
-                utm_crs = f"EPSG:{326 if hemisphere=='N' else 327}{utm_zone:02d}"
-                overlap_utm = overlap.to_crs(utm_crs)
-                overlap["Luas_m2"] = overlap_utm.area
-                overlap["Luas_Ha"] = overlap["Luas_m2"] / 10000
-                st.write(f"Referensi {i+1}: {selected_refs[i]}")
-                st.dataframe(overlap[["Luas_m2", "Luas_Ha"]])
-            else:
-                st.info(f"Tidak ada overlap dengan {selected_refs[i]}")
-        except Exception as e:
-            st.warning(f"⚠️ Gagal menghitung overlap dengan {selected_refs[i]}: {e}")
+# --- Pilih Zona UTM ---
+st.subheader("📐 Pilihan Sistem Koordinat")
+col1, col2 = st.columns(2)
+utm_zone = col1.number_input("Masukkan nomor zona UTM", min_value=46, max_value=54, value=48)
+hemisphere = col2.radio("Hemisfer", ["N", "S"], index=0)
+epsg_code = 32600 + utm_zone if hemisphere == "N" else 32700 + utm_zone
 
-# --- Pilih Basemap ---
-st.subheader("🗺️ Pilih Basemap")
-basemap_choice = st.selectbox(
-    "Pilih jenis basemap",
-    ["OpenStreetMap", "CartoDB Positron", "CartoDB DarkMatter", "Esri Satellite"]
-)
-
-# --- Peta Interaktif ---
+# --- Hitung Luas + Overlap ---
 if all_gdfs:
     gdf_proyek = gpd.GeoDataFrame(pd.concat(all_gdfs, ignore_index=True), crs=all_gdfs[0].crs)
-    gdf_centroid = gdf_proyek.to_crs(epsg=4326).geometry.centroid
-    center = [gdf_centroid.y.mean(), gdf_centroid.x.mean()]
+    gdf_proj = gdf_proyek.to_crs(epsg=epsg_code)
 
+    # Luas total
+    gdf_proj["area_m2"] = gdf_proj.geometry.area
+    st.metric("📏 Total Luas Proyek (ha)", round(gdf_proj["area_m2"].sum() / 10000, 2))
+
+    # Overlap dengan referensi
+    if gdf_refs:
+        gdf_ref = gpd.GeoDataFrame(pd.concat(gdf_refs, ignore_index=True), crs=gdf_refs[0].crs).to_crs(epsg=epsg_code)
+
+        # Filter referensi dengan bounding box
+        gdf_ref = gdf_ref[gdf_ref.intersects(gdf_proj.unary_union.envelope)]
+
+        # Sederhanakan geometri tampilan (hemat RAM)
+        gdf_proj_simplified = gdf_proj.copy()
+        gdf_proj_simplified["geometry"] = gdf_proj_simplified.geometry.simplify(tolerance=50)
+
+        gdf_ref_simplified = gdf_ref.copy()
+        gdf_ref_simplified["geometry"] = gdf_ref_simplified.geometry.simplify(tolerance=50)
+
+        # Hitung overlap asli (tanpa simplify)
+        overlap = gpd.overlay(gdf_proj, gdf_ref, how="intersection")
+        overlap["area_m2"] = overlap.geometry.area
+        st.metric("📏 Luas Overlap dengan Referensi (ha)", round(overlap["area_m2"].sum() / 10000, 2))
+
+# --- Peta Interaktif ---
+    gdf_centroid = gdf_proj.to_crs(epsg=4326).geometry.centroid
+    center = [gdf_centroid.y.mean(), gdf_centroid.x.mean()]
     m = folium.Map(location=center, zoom_start=8)
 
-    if basemap_choice == "OpenStreetMap":
-        folium.TileLayer("OpenStreetMap").add_to(m)
-    elif basemap_choice == "CartoDB Positron":
-        folium.TileLayer("CartoDB positron").add_to(m)
-    elif basemap_choice == "CartoDB DarkMatter":
-        folium.TileLayer("CartoDB dark_matter").add_to(m)
-    elif basemap_choice == "Esri Satellite":
-        folium.TileLayer(
-            tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-            attr="Tiles © Esri &mdash; Source: Esri, USGS, NOAA",
-            name="Esri Satellite",
-            overlay=False,
-            control=True
-        ).add_to(m)
-
-    # Layer proyek
     folium.GeoJson(
-        gdf_proyek.to_crs(epsg=4326),
+        gdf_proj_simplified.to_crs(epsg=4326),
         name="Proyek",
         style_function=lambda x: {"color": "purple", "fillOpacity": 0.5},
     ).add_to(m)
 
-    # Layer referensi
     for i, gdf_ref in enumerate(gdf_refs):
         folium.GeoJson(
             gdf_ref.to_crs(epsg=4326),
@@ -262,7 +144,13 @@ if all_gdfs:
             style_function=lambda x: {"color": "gray", "fillOpacity": 0},
         ).add_to(m)
 
-    folium.LayerControl().add_to(m)
+    if not overlap.empty:
+        folium.GeoJson(
+            overlap.to_crs(epsg=4326),
+            name="Overlap",
+            style_function=lambda x: {"color": "red", "fillOpacity": 0.7},
+        ).add_to(m)
 
+    folium.LayerControl().add_to(m)
     st.subheader("🗺️ Peta Interaktif")
     st_folium(m, width=900, height=600)
