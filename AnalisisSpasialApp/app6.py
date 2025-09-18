@@ -40,16 +40,33 @@ if uploaded_file:
             gdf_proyek = gpd.read_file(tmpfile_path, driver="KML")
             st.success("✅ KML berhasil dibaca dan dikonversi ke GeoDataFrame")
 
-            # --- Konversi KML ke SHP & buat ZIP untuk download ---
-            with tempfile.TemporaryDirectory() as tmpdir:
-                shp_path = os.path.join(tmpdir, "kml_to_shp.shp")
-                gdf_proyek.to_file(shp_path)
+            # --- Ringkasan geometry ---
+            geom_counts = gdf_proyek.geometry.geom_type.value_counts()
+            st.write("📊 **Ringkasan geometry dalam KML:**")
+            for gtype, count in geom_counts.items():
+                st.write(f"- {gtype}: {count} fitur")
 
-                # Masukkan semua file shapefile ke dalam zip
+            # --- Konversi KML ke SHP (pisahkan per geometry type) ---
+            with tempfile.TemporaryDirectory() as tmpdir:
                 zip_buffer = BytesIO()
+
+                geom_types = {
+                    "polygon": ["Polygon", "MultiPolygon"],
+                    "line": ["LineString", "MultiLineString"],
+                    "point": ["Point", "MultiPoint"],
+                }
+
                 with zipfile.ZipFile(zip_buffer, "w") as zf:
-                    for file in os.listdir(tmpdir):
-                        zf.write(os.path.join(tmpdir, file), arcname=file)
+                    for gname, gtypes in geom_types.items():
+                        gdf_sub = gdf_proyek[gdf_proyek.geometry.geom_type.isin(gtypes)]
+                        if not gdf_sub.empty:
+                            shp_path = os.path.join(tmpdir, f"kml_{gname}.shp")
+                            gdf_sub.to_file(shp_path)
+
+                            # Tambahkan semua file shapefile (.shp, .shx, .dbf, .prj)
+                            for file in os.listdir(tmpdir):
+                                if file.startswith(f"kml_{gname}."):
+                                    zf.write(os.path.join(tmpdir, file), arcname=file)
 
                 st.download_button(
                     label="⬇️ Download SHP (hasil konversi dari KML)",
@@ -67,7 +84,6 @@ REFERENSI_DIR = "referensi"
 if not os.path.exists(REFERENSI_DIR):
     os.makedirs(REFERENSI_DIR)
 
-# Upload Shapefile Referensi
 uploaded_ref = st.file_uploader("Upload Shapefile Referensi (ZIP)", type="zip", key="ref")
 if uploaded_ref:
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -79,7 +95,7 @@ if uploaded_ref:
 
     st.success("✅ Shapefile referensi berhasil disimpan!")
 
-# List semua shapefile referensi
+# List shapefile referensi
 shp_files = [f for f in os.listdir(REFERENSI_DIR) if f.endswith(".shp")]
 selected_refs = st.multiselect("Pilih Shapefile Referensi", shp_files)
 
@@ -96,12 +112,13 @@ basemap_choice = st.selectbox(
     ["OpenStreetMap", "CartoDB Positron", "CartoDB DarkMatter", "Esri Satellite"]
 )
 
+# --- Tampilkan Peta ---
 if gdf_proyek is not None:
     gdf_centroid = gdf_proyek.to_crs(epsg=4326).geometry.centroid
     center = [gdf_centroid.y.mean(), gdf_centroid.x.mean()]
     m = folium.Map(location=center, zoom_start=12)
 
-    # Tambahkan basemap
+    # Basemap
     if basemap_choice == "OpenStreetMap":
         folium.TileLayer("OpenStreetMap").add_to(m)
     elif basemap_choice == "CartoDB Positron":
@@ -117,14 +134,14 @@ if gdf_proyek is not None:
             control=True
         ).add_to(m)
 
-    # Tambahkan proyek ke peta
+    # Proyek
     folium.GeoJson(
         gdf_proyek.to_crs(epsg=4326),
         name="Proyek",
         style_function=lambda x: {"color": "purple", "fillOpacity": 0.5},
     ).add_to(m)
 
-    # Tambahkan referensi ke peta
+    # Referensi
     for i, gdf_ref in enumerate(gdf_refs):
         folium.GeoJson(
             gdf_ref.to_crs(epsg=4326),
