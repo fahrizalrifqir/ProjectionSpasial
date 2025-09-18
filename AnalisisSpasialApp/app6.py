@@ -8,8 +8,12 @@ import shutil
 
 # === Fungsi untuk memuat GeoDataFrame dari file ZIP ===
 @st.cache_data
-def load_geodataframe_from_zip(uploaded_file, upload_dir):
+def load_geodataframe_from_zip(uploaded_file, folder_name="uploads"):
     try:
+        # Gunakan path absolut agar folder selalu ada
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        upload_dir = os.path.join(base_dir, folder_name)
+
         if os.path.exists(upload_dir):
             shutil.rmtree(upload_dir)
         os.makedirs(upload_dir, exist_ok=True)
@@ -81,28 +85,16 @@ if uploaded_file is not None:
     referensi_path = None
     if referensi_choice == "Unggah file sendiri":
         if uploaded_referensi_file:
-            ref_dir = "uploaded_referensi"
-            if os.path.exists(ref_dir):
-                shutil.rmtree(ref_dir)
-            os.makedirs(ref_dir, exist_ok=True)
-
-            ref_zip_path = os.path.join(ref_dir, uploaded_referensi_file.name)
-            with open(ref_zip_path, "wb") as f:
-                f.write(uploaded_referensi_file.getbuffer())
-            with zipfile.ZipFile(ref_zip_path, "r") as zip_ref:
-                zip_ref.extractall(ref_dir)
-            shp_files = [f for f in os.listdir(ref_dir) if f.endswith(".shp")]
-            if not shp_files:
-                st.error("❌ Tidak ada file .shp dalam ZIP referensi")
+            referensi, error_ref = load_geodataframe_from_zip(uploaded_referensi_file, "uploaded_referensi")
+            if error_ref:
+                st.error(f"❌ Error pada file referensi: {error_ref}")
                 st.stop()
-            referensi_path = os.path.join(ref_dir, shp_files[0])
         else:
             st.warning("Silakan unggah file referensi.")
             st.stop()
     else:
         referensi_path = os.path.join(REFERENSI_DIR, referensi_choice)
-
-    referensi = gpd.read_file(referensi_path)
+        referensi = gpd.read_file(referensi_path)
 
     # --- Reproject ke UTM ---
     epsg_code = f"326{zona}" if hemisphere == "N" else f"327{zona}"
