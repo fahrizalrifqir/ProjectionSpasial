@@ -25,6 +25,12 @@ per_shp_zips = []   # simpan hasil per SHP
 per_file_zips = []  # simpan hasil per file
 all_zip_buffer = BytesIO()
 
+# --- Pilihan Zona UTM ---
+st.sidebar.subheader("⚙️ Pengaturan")
+utm_zone = st.sidebar.number_input("Zona UTM (misalnya 48 untuk Indonesia barat)", 45, 55, 48)
+hemisphere = st.sidebar.selectbox("Belahan Bumi", ["Utara", "Selatan"])
+epsg_code = 32600 + utm_zone if hemisphere == "Utara" else 32700 + utm_zone
+
 if uploaded_files:
     with tempfile.TemporaryDirectory() as shpdir:
         with zipfile.ZipFile(all_zip_buffer, "w") as zf_all:
@@ -77,6 +83,16 @@ if uploaded_files:
                         st.markdown(f"### 📂 Konversi ke Shapefile")
                         for geom, count in geom_summary.items():
                             st.write(f"- {geom}: {count} fitur")
+
+                        # --- Perhitungan luas ---
+                        try:
+                            gdf_projected = gdf.to_crs(epsg=epsg_code)
+                            if "Polygon" in geom_summary or "MultiPolygon" in geom_summary:
+                                gdf_projected["area_ha"] = gdf_projected.area / 10000
+                                total_area = gdf_projected["area_ha"].sum()
+                                st.info(f"📐 Total Luas: {total_area:,.2f} ha (EPSG:{epsg_code})")
+                        except Exception as e:
+                            st.warning(f"Gagal menghitung luas: {e}")
 
                         st.success(f"✅ {uploaded_file.name} berhasil diproses")
 
@@ -134,13 +150,14 @@ if uploaded_files:
                 mime="application/zip"
             )
 
-    with st.expander("📦 Download Semua Sekaligus", expanded=False):
-        st.download_button(
-            label="⬇️ Download all_files.zip",
-            data=all_zip_buffer.getvalue(),
-            file_name="all_files.zip",
-            mime="application/zip"
-        )
+    if len(uploaded_files) > 1:
+        with st.expander("📦 Download Semua Sekaligus", expanded=False):
+            st.download_button(
+                label="⬇️ Download all_files.zip",
+                data=all_zip_buffer.getvalue(),
+                file_name="all_files.zip",
+                mime="application/zip"
+            )
 
 # --- Folder Referensi ---
 st.subheader("📂 Shapefile Referensi")
