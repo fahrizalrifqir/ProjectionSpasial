@@ -28,14 +28,18 @@ def load_shapefile_from_zip(uploaded_file, extract_dir):
     return gpd.read_file(os.path.join(extract_dir, shp_files[0]))
 
 # --- Upload Tapak ---
-uploaded_tapak = st.file_uploader("Upload Shapefile Tapak Proyek (ZIP)", type="zip")
+uploaded_tapak = st.file_uploader("📂 Upload Shapefile Tapak Proyek (ZIP)", type="zip")
 
 # --- Referensi: pilih dari folder atau upload ---
-st.subheader("📂 Pilih Shapefile Referensi")
+st.subheader("📂 Pilih Shapefile Referensi (Batas Admin)")
 REFERENSI_DIR = "referensi"
-referensi_options = []
-if os.path.exists(REFERENSI_DIR):
-    referensi_options = [f for f in os.listdir(REFERENSI_DIR) if f.endswith(".shp")]
+
+# Pastikan folder referensi ada
+if not os.path.exists(REFERENSI_DIR):
+    os.makedirs(REFERENSI_DIR)
+
+# Daftar shp referensi bawaan
+referensi_options = [f for f in os.listdir(REFERENSI_DIR) if f.endswith(".shp")]
 
 referensi_choice = st.selectbox(
     "Pilih Shapefile Referensi",
@@ -48,11 +52,11 @@ if referensi_choice == "Unggah file sendiri":
 
 # --- Pilihan basemap ---
 basemap_choice = st.selectbox(
-    "Pilih Basemap",
+    "🗺️ Pilih Basemap",
     ["OpenStreetMap", "ESRI Satelit"]
 )
 
-# --- Proses jika file ada ---
+# --- Proses jika tapak ada ---
 if uploaded_tapak:
     tapak = load_shapefile_from_zip(uploaded_tapak, "uploads_tapak")
 
@@ -92,10 +96,16 @@ if uploaded_tapak:
     if basemap_choice == "ESRI Satelit":
         folium.TileLayer("Esri.WorldImagery").add_to(m)
 
-    folium.GeoJson(tapak, name="Tapak", style_function=lambda x: {"color": "purple"}).add_to(m)
-    folium.GeoJson(referensi, name="Referensi", style_function=lambda x: {"color": "black"}).add_to(m)
+    folium.GeoJson(
+        tapak, name="Tapak", style_function=lambda x: {"color": "purple", "fillOpacity": 0.4}
+    ).add_to(m)
+    folium.GeoJson(
+        referensi, name="Referensi (Batas Admin)", style_function=lambda x: {"color": "black", "weight": 1}
+    ).add_to(m)
     if not overlay.empty:
-        folium.GeoJson(overlay, name="Overlay", style_function=lambda x: {"color": "red"}).add_to(m)
+        folium.GeoJson(
+            overlay, name="Overlay", style_function=lambda x: {"color": "red", "fillOpacity": 0.6}
+        ).add_to(m)
 
     folium.LayerControl().add_to(m)
 
