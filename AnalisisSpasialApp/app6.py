@@ -42,7 +42,7 @@ if uploaded_ref:
         with open(zip_path, "wb") as f:
             f.write(uploaded_ref.read())
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(REFERENSI_DIR)  # Simpan langsung ke folder referensi
+            zip_ref.extractall(REFERENSI_DIR)
 
     st.success("✅ Shapefile referensi berhasil disimpan!")
 
@@ -55,16 +55,9 @@ selected_refs = st.multiselect(
     default=shp_files[:1] if shp_files else None
 )
 
-gdf_refs = []
-for ref_file in selected_refs:
-    ref_path = os.path.join(REFERENSI_DIR, ref_file)
-    if os.path.exists(ref_path):
-        gdf_refs.append(gpd.read_file(ref_path))
-
-# --- Menu Hapus Shapefile Referensi Permanen ---
-if shp_files:
-    st.subheader("🗑️ Hapus Shapefile Referensi")
-    file_to_delete = st.selectbox("Pilih shapefile untuk dihapus permanen", shp_files)
+# --- Tombol Hapus Shapefile langsung dari pilihan ---
+if selected_refs:
+    file_to_delete = st.selectbox("Pilih shapefile dari pilihan untuk dihapus", selected_refs)
 
     if st.button("❌ Hapus Shapefile Ini"):
         st.warning(f"Anda yakin ingin menghapus `{file_to_delete}` secara permanen? Tindakan ini tidak bisa dibatalkan.")
@@ -77,8 +70,13 @@ if shp_files:
                 if os.path.exists(path):
                     os.remove(path)
             st.success(f"✅ File `{file_to_delete}` berhasil dihapus permanen!")
-else:
-    st.info("Belum ada shapefile referensi yang tersimpan.")
+            st.experimental_rerun()
+
+gdf_refs = []
+for ref_file in selected_refs:
+    ref_path = os.path.join(REFERENSI_DIR, ref_file)
+    if os.path.exists(ref_path):
+        gdf_refs.append(gpd.read_file(ref_path))
 
 # --- Pilihan Zona UTM ---
 st.subheader("📐 Pilih Proyeksi UTM untuk Analisis")
