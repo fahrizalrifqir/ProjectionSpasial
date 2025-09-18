@@ -15,7 +15,9 @@ st.set_page_config(layout="wide")
 st.title("🗺️ Analisis Spasial - Overlay Luasan")
 
 # === Jalur yang disesuaikan untuk GitHub dan lokal ===
+# Dapatkan jalur absolut dari direktori skrip saat ini
 script_dir = os.path.dirname(os.path.abspath(__file__))
+# Gabungkan dengan nama folder referensi
 REFERENSI_DIR = os.path.join(script_dir, "referensi")
 
 # === Input widget utama ===
@@ -103,14 +105,19 @@ if uploaded_file is not None:
             overlay["luas_m2"] = overlay.geometry.area
 
             st.subheader("📊 Hasil Luasan")
-            st.write(f"**Luas Tapak Proyek (m²):** {tapak['luas_m2'].sum():,.2f}")
-            st.write(f"**Luas Overlay (m²):** {overlay['luas_m2'].sum():,.2f}")
+            
+            # --- PERBAIKAN FORMAT ANGKA DI SINI ---
+            luas_tapak_str = f"{tapak['luas_m2'].sum():,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+            luas_overlay_str = f"{overlay['luas_m2'].sum():,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+            
+            st.write(f"**Luas Tapak Proyek (m²):** {luas_tapak_str}")
+            st.write(f"**Luas Overlay (m²):** {luas_overlay_str}")
             
             # --- Kode Plotting ---
             st.subheader("Peta Overlay")
+            
             fig, ax = plt.subplots(figsize=(10, 10))
             
-            # PENTING: Menambahkan try-except di sini untuk menangani kegagalan pemuatan basemap
             try:
                 ctx.add_basemap(ax, source=basemap_options[basemap_choice], crs=tapak.crs.to_string())
             except Exception as e:
@@ -121,7 +128,6 @@ if uploaded_file is not None:
             if not overlay.empty:
                 overlay.plot(ax=ax, color="red", alpha=0.7, label="Overlay")
             
-            # Mengatur batas plot secara eksplisit untuk mencegah skala tidak terkontrol
             ax.set_xlim(tapak.total_bounds[0] - 500, tapak.total_bounds[2] + 500)
             ax.set_ylim(tapak.total_bounds[1] - 500, tapak.total_bounds[3] + 500)
             
