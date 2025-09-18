@@ -54,7 +54,7 @@ basemap_choice = st.selectbox("Pilih Basemap", list(basemap_options.keys()))
 
 # === Plotting dan analisis hanya akan berjalan jika file diunggah ===
 if uploaded_file is not None:
-    # (Logika untuk menyimpan dan mengekstrak file yang diunggah)
+    # Logika untuk menyimpan dan mengekstrak file yang diunggah
     upload_dir = "uploads"
     os.makedirs(upload_dir, exist_ok=True)
     zip_path = os.path.join(upload_dir, uploaded_file.name)
