@@ -14,8 +14,6 @@ def load_geodataframe(path):
 st.title("🗺️ Analisis Spasial - Overlay Luasan")
 
 # === Jalur yang disesuaikan untuk GitHub ===
-# Jalur ini akan berfungsi karena repositori Anda memiliki folder 'referensi'
-# di dalam folder yang sama dengan 'app7.py'
 REFERENSI_DIR = "referensi"
 
 # === Input widget di luar blok if ===
@@ -25,7 +23,6 @@ uploaded_file = st.file_uploader("Upload Shapefile Tapak Proyek (ZIP)", type="zi
 st.subheader("Pilih atau Unggah Shapefile Referensi")
 referensi_files = []
 try:
-    # Menggunakan jalur relatif
     referensi_files = [f for f in os.listdir(REFERENSI_DIR) if f.endswith(".shp")]
     if not referensi_files:
         st.warning(f"Folder referensi kosong di jalur: {REFERENSI_DIR}")
@@ -43,9 +40,9 @@ if referensi_choice == "Unggah file sendiri":
 zona = st.number_input("Masukkan zona UTM (46 - 54)", min_value=46, max_value=54, value=50)
 hemisphere = st.radio("Pilih Hemisfer", ["S", "N"])
 
-# === Plotting dan analisis hanya akan berjalan jika file diunggah ===
+# === Plotting dan analisis hanya akan berjalan jika file tapak diunggah ===
 if uploaded_file is not None:
-    # Logika untuk menyimpan dan mengekstrak file yang diunggah
+    # (Logika untuk menyimpan dan mengekstrak file tapak)
     upload_dir = "uploads"
     os.makedirs(upload_dir, exist_ok=True)
     zip_path = os.path.join(upload_dir, uploaded_file.name)
@@ -60,7 +57,9 @@ if uploaded_file is not None:
     else:
         shp_path = os.path.join(upload_dir, shp_files[0])
         referensi_path = None
+        
         if uploaded_referensi_file is not None:
+            # (Logika untuk memproses file referensi yang diunggah)
             referensi_upload_dir = "uploaded_referensi"
             os.makedirs(referensi_upload_dir, exist_ok=True)
             referensi_zip_path = os.path.join(referensi_upload_dir, uploaded_referensi_file.name)
@@ -77,46 +76,44 @@ if uploaded_file is not None:
             referensi_path = os.path.join(REFERENSI_DIR, referensi_choice)
         
         if referensi_path is None:
-            st.error("Silakan unggah file referensi atau pilih salah satu.")
-            st.stop()
+            st.warning("Silakan unggah file referensi atau pilih salah satu.")
+        else:
+            # === Semua logika plotting dan analisis di sini ===
+            tapak = load_geodataframe(shp_path)
+            referensi = load_geodataframe(referensi_path)
 
-        # Memuat data
-        tapak = load_geodataframe(shp_path)
-        referensi = load_geodataframe(referensi_path)
+            epsg_code = f"326{zona}" if hemisphere == "N" else f"327{zona}"
+            tapak = tapak.to_crs(epsg=epsg_code)
+            referensi = referensi.to_crs(epsg=epsg_code)
 
-        # Proyeksi ke UTM
-        epsg_code = f"326{zona}" if hemisphere == "N" else f"327{zona}"
-        tapak = tapak.to_crs(epsg=epsg_code)
-        referensi = referensi.to_crs(epsg=epsg_code)
+            tapak["luas_m2"] = tapak.geometry.area
+            overlay = gpd.overlay(tapak, referensi, how="intersection")
+            overlay["luas_m2"] = overlay.geometry.area
 
-        # Hitung luas
-        tapak["luas_m2"] = tapak.geometry.area
-        overlay = gpd.overlay(tapak, referensi, how="intersection")
-        overlay["luas_m2"] = overlay.geometry.area
+            st.subheader("📊 Hasil Luasan")
+            st.write("**Luas Tapak Proyek (m²):**", round(tapak["luas_m2"].sum(), 2))
+            st.write("**Luas Overlay (m²):**", round(overlay["luas_m2"].sum(), 2))
 
-        st.subheader("📊 Hasil Luasan")
-        st.write("**Luas Tapak Proyek (m²):**", round(tapak["luas_m2"].sum(), 2))
-        st.write("**Luas Overlay (m²):**", round(overlay["luas_m2"].sum(), 2))
+            # === Tempatkan widget Basemap sebelum plot ===
+            basemap_options = {
+                "OpenStreetMap": ctx.providers.OpenStreetMap.Mapnik,
+                "ESRI Satelit": ctx.providers.Esri.WorldImagery,
+                "Carto Positron": ctx.providers.CartoDB.Positron,
+            }
+            basemap_choice = st.selectbox("Pilih Basemap", list(basemap_options.keys()))
 
-        # Kode plotting yang dipindahkan ke luar blok utama
-        fig, ax = plt.subplots(figsize=(8, 8))
-        referensi.boundary.plot(ax=ax, color="black", linewidth=0.5, label="Referensi")
-        tapak.plot(ax=ax, color="purple", alpha=0.5, label="Tapak Proyek")
-        overlay.plot(ax=ax, color="red", alpha=0.7, label="Overlay")
+            fig, ax = plt.subplots(figsize=(8, 8))
+            
+            # PENTING: Tambahkan basemap sebelum data geospasial diplot
+            ctx.add_basemap(ax, source=basemap_options[basemap_choice], crs=tapak.crs.to_string())
 
-        # Zoom ke batas tapak
-        ax.set_xlim(tapak.total_bounds[0] - 500, tapak.total_bounds[2] + 500)
-        ax.set_ylim(tapak.total_bounds[1] - 500, tapak.total_bounds[3] + 500)
+            referensi.boundary.plot(ax=ax, color="black", linewidth=0.5, label="Referensi")
+            tapak.plot(ax=ax, color="purple", alpha=0.5, label="Tapak Proyek")
+            overlay.plot(ax=ax, color="red", alpha=0.7, label="Overlay")
 
-        # Tambahkan basemap (basemap widget harus berada di atas blok if ini)
-        basemap_options = {
-            "OpenStreetMap": ctx.providers.OpenStreetMap.Mapnik,
-            "ESRI Satelit": ctx.providers.Esri.WorldImagery,
-            "Carto Positron": ctx.providers.CartoDB.Positron,
-        }
-        basemap_choice = st.selectbox("Pilih Basemap", list(basemap_options.keys()))
-        ctx.add_basemap(ax, source=basemap_options[basemap_choice], crs=tapak.crs.to_string())
+            ax.set_xlim(tapak.total_bounds[0] - 500, tapak.total_bounds[2] + 500)
+            ax.set_ylim(tapak.total_bounds[1] - 500, tapak.total_bounds[3] + 500)
 
-        ax.legend()
-        ax.set_title("Peta Overlay (Zoom ke Tapak)", fontsize=14)
-        st.pyplot(fig)
+            ax.legend()
+            ax.set_title("Peta Overlay (Zoom ke Tapak)", fontsize=14)
+            st.pyplot(fig)
