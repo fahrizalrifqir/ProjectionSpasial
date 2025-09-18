@@ -60,7 +60,6 @@ if uploaded_files:
                             kmz_path = os.path.join(tmpdir, uploaded_file.name)
                             with open(kmz_path, "wb") as f:
                                 f.write(uploaded_file.read())
-
                             try:
                                 with zipfile.ZipFile(kmz_path, "r") as kmz_ref:
                                     kmz_ref.extractall(tmpdir)
@@ -70,7 +69,7 @@ if uploaded_files:
                                     continue
                                 gdf = gpd.read_file(os.path.join(tmpdir, kml_files[0]), driver="KML")
                             except zipfile.BadZipFile:
-                                st.error(f"❌ {uploaded_file.name} bukan KMZ yang valid (ZIP error)")
+                                st.error(f"❌ {uploaded_file.name} bukan KMZ yang valid")
                                 continue
                         else:
                             st.error(f"❌ Format {ext} belum didukung")
@@ -87,7 +86,7 @@ if uploaded_files:
                             st.write(f"- {geom}: {count} fitur")
                         st.success(f"✅ {uploaded_file.name} berhasil diproses")
 
-                        # --- Pilihan zona UTM & belahan ---
+                        # --- Pilihan zona UTM ---
                         st.markdown("**📐 Hitung Luas (m² dan Ha)**")
                         col1, col2 = st.columns(2)
                         with col1:
@@ -108,7 +107,7 @@ if uploaded_files:
                         except Exception as e:
                             st.warning(f"⚠️ Gagal menghitung luas: {e}")
 
-                        # --- Simpan hasil shapefile per tipe geometry ---
+                        # --- Simpan shapefile per geometry ---
                         geom_types = {
                             "polygon": ["Polygon", "MultiPolygon"],
                             "line": ["LineString", "MultiLineString"],
@@ -142,7 +141,7 @@ if uploaded_files:
     # --- Download hasil ---
     st.subheader("📥 Download Hasil")
 
-    with st.expander("📦 Download Per Shapefile", expanded=False):
+    with st.expander("📦 Download Per Shapefile"):
         for shp_name, shp_zip in per_shp_zips:
             st.download_button(
                 label=f"⬇️ {shp_name}.zip",
@@ -151,7 +150,7 @@ if uploaded_files:
                 mime="application/zip"
             )
 
-    with st.expander("📂 Download Per File", expanded=False):
+    with st.expander("📂 Download Per File"):
         for fname, file_zip in per_file_zips:
             st.download_button(
                 label=f"⬇️ {fname}.zip",
@@ -161,7 +160,7 @@ if uploaded_files:
             )
 
     if len(uploaded_files) > 1:
-        with st.expander("📦 Download Semua Sekaligus", expanded=False):
+        with st.expander("📦 Download Semua Sekaligus"):
             st.download_button(
                 label="⬇️ Download all_files.zip",
                 data=all_zip_buffer.getvalue(),
@@ -170,7 +169,7 @@ if uploaded_files:
             )
 
 # ===============================
-# Upload Shapefile Referensi
+# Shapefile Referensi
 # ===============================
 st.subheader("📂 Shapefile Referensi")
 REFERENSI_DIR = "referensi"
@@ -189,6 +188,23 @@ if uploaded_ref:
 shp_files = [f for f in os.listdir(REFERENSI_DIR) if f.endswith(".shp")]
 selected_refs = st.multiselect("Pilih Shapefile Referensi", shp_files)
 
+# Fitur hapus shapefile referensi
+if shp_files:
+    file_to_delete = st.selectbox("🗑️ Hapus shapefile referensi?", ["-"] + shp_files)
+    if file_to_delete != "-":
+        if st.button("Hapus File"):
+            basename = os.path.splitext(file_to_delete)[0]
+            for f in os.listdir(REFERENSI_DIR):
+                if f.startswith(basename):
+                    os.remove(os.path.join(REFERENSI_DIR, f))
+            st.warning(f"❌ {file_to_delete} berhasil dihapus. Silakan refresh halaman.")
+
+    if st.button("🗑️ Hapus Semua Shapefile Referensi"):
+        for f in os.listdir(REFERENSI_DIR):
+            os.remove(os.path.join(REFERENSI_DIR, f))
+        st.warning("❌ Semua shapefile referensi berhasil dihapus. Silakan refresh halaman.")
+
+# Load referensi terpilih
 gdf_refs = []
 for ref_file in selected_refs:
     ref_path = os.path.join(REFERENSI_DIR, ref_file)
@@ -196,14 +212,13 @@ for ref_file in selected_refs:
         gdf_refs.append(gpd.read_file(ref_path))
 
 # ===============================
-# Hitung overlap dengan referensi
+# Hitung overlap
 # ===============================
 if all_gdfs and gdf_refs:
     st.markdown("### 📐 Luas Overlap dengan Referensi")
     gdf_proyek = gpd.GeoDataFrame(pd.concat(all_gdfs, ignore_index=True), crs=all_gdfs[0].crs)
     for i, gdf_ref in enumerate(gdf_refs):
         try:
-            # samakan CRS
             if gdf_ref.crs != gdf_proyek.crs:
                 gdf_ref = gdf_ref.to_crs(gdf_proyek.crs)
             overlap = gpd.overlay(gdf_proyek, gdf_ref, how="intersection")
@@ -226,8 +241,6 @@ if all_gdfs and gdf_refs:
 # ===============================
 if all_gdfs:
     gdf_proyek = gpd.GeoDataFrame(pd.concat(all_gdfs, ignore_index=True), crs=all_gdfs[0].crs)
-
-    # Hitung bounding box untuk zoom otomatis
     bounds = gdf_proyek.to_crs(epsg=4326).total_bounds  # [minx, miny, maxx, maxy]
     center = [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2]
 
@@ -254,14 +267,14 @@ if all_gdfs:
     else:
         folium.TileLayer("OpenStreetMap").add_to(m)
 
-    # Tambahkan layer proyek
+    # Proyek
     folium.GeoJson(
         gdf_proyek.to_crs(epsg=4326),
         name="Proyek",
         style_function=lambda x: {"color": "purple", "fillOpacity": 0.5},
     ).add_to(m)
 
-    # Tambahkan layer referensi
+    # Referensi
     for i, gdf_ref in enumerate(gdf_refs):
         folium.GeoJson(
             gdf_ref.to_crs(epsg=4326),
@@ -269,7 +282,7 @@ if all_gdfs:
             style_function=lambda x: {"color": "gray", "fillOpacity": 0},
         ).add_to(m)
 
-    # Zoom otomatis ke extent proyek
+    # Zoom ke extent proyek
     m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
 
     folium.LayerControl().add_to(m)
