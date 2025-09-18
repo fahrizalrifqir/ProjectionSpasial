@@ -4,18 +4,17 @@ import matplotlib.pyplot as plt
 import contextily as ctx
 import os
 import zipfile
+import shutil
 
 # Terapkan caching untuk fungsi yang memuat data GeoPandas
 @st.cache_data
 def load_geodataframe_from_zip(uploaded_file, upload_dir):
     """Fungsi untuk memuat GeoDataFrame dari file ZIP yang diunggah."""
     try:
-        # Hapus konten folder unggahan sebelumnya untuk menghindari konflik
+        # Hapus konten folder unggahan sebelumnya untuk memastikan kebersihan
         if os.path.exists(upload_dir):
-            for file in os.listdir(upload_dir):
-                os.remove(os.path.join(upload_dir, file))
-        else:
-            os.makedirs(upload_dir, exist_ok=True)
+            shutil.rmtree(upload_dir)
+        os.makedirs(upload_dir, exist_ok=True)
             
         # Simpan dan ekstrak file yang baru diunggah
         zip_path = os.path.join(upload_dir, uploaded_file.name)
@@ -42,10 +41,10 @@ st.title("🗺️ Analisis Spasial - Overlay Luasan")
 script_dir = os.path.dirname(os.path.abspath(__file__))
 REFERENSI_DIR = os.path.join(script_dir, "referensi")
 
-# Tambahkan tombol untuk membersihkan cache
+# Tambahkan tombol untuk membersihkan cache (opsional, sebagai cadangan)
 if st.button("Bersihkan Cache dan Muat Ulang"):
     st.cache_data.clear()
-    st.experimental_rerun()
+    st.rerun()
 
 # === Input widget utama ===
 uploaded_file = st.file_uploader("Upload Shapefile Tapak Proyek (ZIP)", type="zip")
@@ -93,7 +92,11 @@ if uploaded_file is not None:
     if referensi_choice == "Unggah file sendiri":
         if uploaded_referensi_file:
             referensi_upload_dir = "uploaded_referensi"
+            # Hapus folder unggahan referensi sebelumnya
+            if os.path.exists(referensi_upload_dir):
+                shutil.rmtree(referensi_upload_dir)
             os.makedirs(referensi_upload_dir, exist_ok=True)
+            
             referensi_zip_path = os.path.join(referensi_upload_dir, uploaded_referensi_file.name)
             with open(referensi_zip_path, "wb") as f:
                 f.write(uploaded_referensi_file.getbuffer())
