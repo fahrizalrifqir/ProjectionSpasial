@@ -25,12 +25,6 @@ per_shp_zips = []   # simpan hasil per SHP
 per_file_zips = []  # simpan hasil per file
 all_zip_buffer = BytesIO()
 
-# --- Pilihan Zona UTM ---
-st.sidebar.subheader("⚙️ Pengaturan")
-utm_zone = st.sidebar.number_input("Zona UTM (misalnya 48 untuk Indonesia barat)", 45, 55, 48)
-hemisphere = st.sidebar.selectbox("Belahan Bumi", ["Utara", "Selatan"])
-epsg_code = 32600 + utm_zone if hemisphere == "Utara" else 32700 + utm_zone
-
 if uploaded_files:
     with tempfile.TemporaryDirectory() as shpdir:
         with zipfile.ZipFile(all_zip_buffer, "w") as zf_all:
@@ -64,13 +58,18 @@ if uploaded_files:
                             kmz_path = os.path.join(tmpdir, uploaded_file.name)
                             with open(kmz_path, "wb") as f:
                                 f.write(uploaded_file.read())
-                            with zipfile.ZipFile(kmz_path, "r") as kmz_ref:
-                                kmz_ref.extractall(tmpdir)
-                            kml_files = [f for f in os.listdir(tmpdir) if f.endswith(".kml")]
-                            if not kml_files:
-                                st.error(f"❌ Tidak ada .kml dalam {uploaded_file.name}")
+
+                            try:
+                                with zipfile.ZipFile(kmz_path, "r") as kmz_ref:
+                                    kmz_ref.extractall(tmpdir)
+                                kml_files = [f for f in os.listdir(tmpdir) if f.endswith(".kml")]
+                                if not kml_files:
+                                    st.error(f"❌ Tidak ada .kml dalam {uploaded_file.name}")
+                                    continue
+                                gdf = gpd.read_file(os.path.join(tmpdir, kml_files[0]), driver="KML")
+                            except zipfile.BadZipFile:
+                                st.error(f"❌ {uploaded_file.name} bukan KMZ yang valid (ZIP error)")
                                 continue
-                            gdf = gpd.read_file(os.path.join(tmpdir, kml_files[0]), driver="KML")
                         else:
                             st.error(f"❌ Format {ext} belum didukung")
                             continue
@@ -78,23 +77,26 @@ if uploaded_files:
                         gdf["source_file"] = uploaded_file.name
                         all_gdfs.append(gdf)
 
-                        # --- Ringkasan geometry per file ---
-                        geom_summary = gdf.geometry.geom_type.value_counts().to_dict()
+                        # --- Info konversi ---
                         st.markdown(f"### 📂 Konversi ke Shapefile")
+                        geom_summary = gdf.geometry.geom_type.value_counts().to_dict()
                         for geom, count in geom_summary.items():
                             st.write(f"- {geom}: {count} fitur")
 
-                        # --- Perhitungan luas ---
-                        try:
-                            gdf_projected = gdf.to_crs(epsg=epsg_code)
-                            if "Polygon" in geom_summary or "MultiPolygon" in geom_summary:
-                                gdf_projected["area_ha"] = gdf_projected.area / 10000
-                                total_area = gdf_projected["area_ha"].sum()
-                                st.info(f"📐 Total Luas: {total_area:,.2f} ha (EPSG:{epsg_code})")
-                        except Exception as e:
-                            st.warning(f"Gagal menghitung luas: {e}")
-
                         st.success(f"✅ {uploaded_file.name} berhasil diproses")
+
+                        # --- Hitung luas ---
+                        st.markdown("**📐 Hitung Luas (m² dan Ha)**")
+                        # Pilih zona UTM
+                        utm_zone = st.number_input("Masukkan zona UTM (contoh: 48 untuk Jawa Barat)", min_value=1, max_value=60, value=48)
+                        utm_crs = f"EPSG:327{utm_zone}"  # pakai WGS84 UTM selatan
+                        try:
+                            gdf_utm = gdf.to_crs(utm_crs)
+                            gdf["Luas_m2"] = gdf_utm.area
+                            gdf["Luas_Ha"] = gdf["Luas_m2"] / 10000
+                            st.dataframe(gdf[["source_file", "Luas_m2", "Luas_Ha"]])
+                        except Exception as e:
+                            st.warning(f"⚠️ Gagal menghitung luas: {e}")
 
                         # --- Simpan hasil per geometry ---
                         geom_types = {
@@ -103,7 +105,6 @@ if uploaded_files:
                             "point": ["Point", "MultiPoint"],
                         }
 
-                        # ZIP untuk file ini
                         file_zip_buffer = BytesIO()
                         with zipfile.ZipFile(file_zip_buffer, "w") as zf_file:
                             for gname, gtypes in geom_types.items():
@@ -112,7 +113,6 @@ if uploaded_files:
                                     shp_path = os.path.join(shpdir, f"{fname}_{gname}.shp")
                                     gdf_sub.to_file(shp_path)
 
-                                    # --- ZIP per SHP ---
                                     shp_zip_buffer = BytesIO()
                                     with zipfile.ZipFile(shp_zip_buffer, "w") as zf_shp:
                                         for f in os.listdir(shpdir):
@@ -199,7 +199,6 @@ if all_gdfs:
 
     m = folium.Map(location=center, zoom_start=8)
 
-    # Basemap
     if basemap_choice == "OpenStreetMap":
         folium.TileLayer("OpenStreetMap").add_to(m)
     elif basemap_choice == "CartoDB Positron":
