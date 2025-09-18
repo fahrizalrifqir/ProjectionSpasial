@@ -35,7 +35,7 @@ if not os.path.exists(REFERENSI_DIR):
     os.makedirs(REFERENSI_DIR)
 
 # Upload Shapefile Referensi
-uploaded_ref = st.file_uploader("Upload Shapefile Referensi (ZIP)", type="zip")
+uploaded_ref = st.file_uploader("Upload Shapefile Referensi (ZIP)", type="zip", key="ref")
 if uploaded_ref:
     with tempfile.TemporaryDirectory() as tmpdir:
         zip_path = os.path.join(tmpdir, "referensi.zip")
@@ -46,7 +46,7 @@ if uploaded_ref:
 
     st.success("✅ Shapefile referensi berhasil disimpan!")
 
-# List semua shapefile referensi
+# List semua shapefile referensi yang tersedia permanen
 shp_files = [f for f in os.listdir(REFERENSI_DIR) if f.endswith(".shp")]
 
 selected_refs = st.multiselect(
@@ -61,6 +61,21 @@ for ref_file in selected_refs:
     if os.path.exists(ref_path):
         gdf_refs.append(gpd.read_file(ref_path))
 
+# --- Pilihan Zona UTM ---
+st.subheader("📐 Pilih Proyeksi UTM untuk Analisis")
+col1, col2 = st.columns(2)
+with col1:
+    utm_zone = st.number_input("Zona UTM", min_value=1, max_value=60, value=48, step=1)
+with col2:
+    hemisphere = st.radio("Belahan Bumi", ["N", "S"], index=0)
+
+if hemisphere == "N":
+    epsg_code = 32600 + utm_zone
+else:
+    epsg_code = 32700 + utm_zone
+
+st.info(f"EPSG yang dipakai: **{epsg_code}**")
+
 # --- Pilih Basemap ---
 st.subheader("🗺️ Pilih Basemap")
 basemap_options = {
@@ -73,15 +88,15 @@ basemap_choice = st.selectbox("Pilih Basemap", list(basemap_options.keys()))
 # --- Hasil Luasan & Peta ---
 if gdf_proyek is not None:
     st.subheader("📊 Hasil Luasan")
-    luas_proyek = gdf_proyek.to_crs(epsg=3857).area.sum()
+    luas_proyek = gdf_proyek.to_crs(epsg=epsg_code).area.sum()
     st.write(f"**Luas Tapak Proyek (m²):** {luas_proyek:,.2f}")
 
     if gdf_refs:
         luas_overlay_total = 0
         for gdf_ref in gdf_refs:
             luas_overlay = gpd.overlay(
-                gdf_proyek.to_crs(epsg=3857),
-                gdf_ref.to_crs(epsg=3857),
+                gdf_proyek.to_crs(epsg=epsg_code),
+                gdf_ref.to_crs(epsg=epsg_code),
                 how="intersection"
             ).area.sum()
             luas_overlay_total += luas_overlay
