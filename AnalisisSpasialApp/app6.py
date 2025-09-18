@@ -13,7 +13,7 @@ def load_geodataframe(path):
 
 st.title("🗺️ Analisis Spasial - Overlay Luasan")
 
-# === Perbaiki jalur agar selalu berfungsi di Streamlit Cloud ===
+# === Jalur yang disesuaikan untuk GitHub ===
 # Dapatkan jalur absolut dari direktori skrip saat ini
 script_dir = os.path.dirname(os.path.abspath(__file__))
 # Gabungkan dengan nama folder referensi
@@ -44,9 +44,17 @@ if referensi_choice == "Unggah file sendiri":
 zona = st.number_input("Masukkan zona UTM (46 - 54)", min_value=46, max_value=54, value=50)
 hemisphere = st.radio("Pilih Hemisfer", ["S", "N"])
 
+# === Widget basemap dipindahkan ke atas agar dapat diperbarui ===
+basemap_options = {
+    "OpenStreetMap": ctx.providers.OpenStreetMap.Mapnik,
+    "ESRI Satelit": ctx.providers.Esri.WorldImagery,
+    "Carto Positron": ctx.providers.CartoDB.Positron,
+}
+basemap_choice = st.selectbox("Pilih Basemap", list(basemap_options.keys()))
+
 # === Plotting dan analisis hanya akan berjalan jika file diunggah ===
 if uploaded_file is not None:
-    # Logika untuk menyimpan dan mengekstrak file yang diunggah
+    # (Logika untuk menyimpan dan mengekstrak file yang diunggah)
     upload_dir = "uploads"
     os.makedirs(upload_dir, exist_ok=True)
     zip_path = os.path.join(upload_dir, uploaded_file.name)
@@ -98,12 +106,6 @@ if uploaded_file is not None:
             # --- Plotting Code ---
             fig, ax = plt.subplots(figsize=(8, 8))
             
-            basemap_options = {
-                "OpenStreetMap": ctx.providers.OpenStreetMap.Mapnik,
-                "ESRI Satelit": ctx.providers.Esri.WorldImagery,
-                "Carto Positron": ctx.providers.CartoDB.Positron,
-            }
-            basemap_choice = st.selectbox("Pilih Basemap", list(basemap_options.keys()))
             ctx.add_basemap(ax, source=basemap_options[basemap_choice], crs=tapak.crs.to_string())
             
             referensi.boundary.plot(ax=ax, color="black", linewidth=0.5, label="Referensi")
