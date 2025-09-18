@@ -1,4 +1,5 @@
 streamlit
+streamlit-folium
 geopandas
 shapely
 fiona
@@ -8,4 +9,3 @@ matplotlib
 folium
 branca
 pandas
-
