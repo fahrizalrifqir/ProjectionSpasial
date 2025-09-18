@@ -156,5 +156,6 @@ if uploaded_file is not None:
         ax.set_ylim(tapak.total_bounds[1] - 500, tapak.total_bounds[3] + 500)
         
         ax.legend()
-        ax.set_title("Peta Overlay (Zoom ke Tapak)", fontsize=16)
+        ax.set_title("Peta Overlay", fontsize=16)
         st.pyplot(fig)
+
