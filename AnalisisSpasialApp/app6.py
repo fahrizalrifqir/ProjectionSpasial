@@ -10,73 +10,84 @@ from io import BytesIO
 st.set_page_config(page_title="Analisis Spasial Interaktif", layout="wide")
 st.title("🌍 Analisis Spasial Interaktif")
 
-# --- Upload Shapefile Proyek ---
-st.subheader("📂 Upload Shapefile Proyek (ZIP atau KML)")
-uploaded_file = st.file_uploader("Upload file .zip (shapefile) atau .kml", type=["zip", "kml"])
+# --- Upload Shapefile/KML Proyek ---
+st.subheader("📂 Upload Shapefile Proyek (ZIP) atau banyak KML")
+uploaded_files = st.file_uploader(
+    "Upload file .zip (shapefile) atau .kml (bisa lebih dari 1 KML)",
+    type=["zip", "kml"],
+    accept_multiple_files=True
+)
 
 gdf_proyek = None
-if uploaded_file:
-    ext = os.path.splitext(uploaded_file.name)[1].lower()
+if uploaded_files:
+    gdfs = []  # list untuk menampung semua layer
 
-    if ext == ".zip":  # Shapefile ZIP
-        with tempfile.TemporaryDirectory() as tmpdir:
-            zip_path = os.path.join(tmpdir, "proyek.zip")
-            with open(zip_path, "wb") as f:
-                f.write(uploaded_file.read())
-            with zipfile.ZipFile(zip_path, "r") as zip_ref:
-                zip_ref.extractall(tmpdir)
+    for uploaded_file in uploaded_files:
+        ext = os.path.splitext(uploaded_file.name)[1].lower()
 
-            for file in os.listdir(tmpdir):
-                if file.endswith(".shp"):
-                    gdf_proyek = gpd.read_file(os.path.join(tmpdir, file))
-                    break
-
-    elif ext == ".kml":  # File KML
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".kml") as tmpfile:
-            tmpfile.write(uploaded_file.read())
-            tmpfile_path = tmpfile.name
-
-        try:
-            gdf_proyek = gpd.read_file(tmpfile_path, driver="KML")
-            st.success("✅ KML berhasil dibaca dan dikonversi ke GeoDataFrame")
-
-            # --- Ringkasan geometry ---
-            geom_counts = gdf_proyek.geometry.geom_type.value_counts()
-            st.write("📊 **Ringkasan geometry dalam KML:**")
-            for gtype, count in geom_counts.items():
-                st.write(f"- {gtype}: {count} fitur")
-
-            # --- Konversi KML ke SHP (pisahkan per geometry type) ---
+        if ext == ".zip":  # Shapefile ZIP
             with tempfile.TemporaryDirectory() as tmpdir:
-                zip_buffer = BytesIO()
+                zip_path = os.path.join(tmpdir, "proyek.zip")
+                with open(zip_path, "wb") as f:
+                    f.write(uploaded_file.read())
+                with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                    zip_ref.extractall(tmpdir)
 
-                geom_types = {
-                    "polygon": ["Polygon", "MultiPolygon"],
-                    "line": ["LineString", "MultiLineString"],
-                    "point": ["Point", "MultiPoint"],
-                }
+                for file in os.listdir(tmpdir):
+                    if file.endswith(".shp"):
+                        gdfs.append(gpd.read_file(os.path.join(tmpdir, file)))
+                        break
 
-                with zipfile.ZipFile(zip_buffer, "w") as zf:
-                    for gname, gtypes in geom_types.items():
-                        gdf_sub = gdf_proyek[gdf_proyek.geometry.geom_type.isin(gtypes)]
-                        if not gdf_sub.empty:
-                            shp_path = os.path.join(tmpdir, f"kml_{gname}.shp")
-                            gdf_sub.to_file(shp_path)
+        elif ext == ".kml":  # File KML
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".kml") as tmpfile:
+                tmpfile.write(uploaded_file.read())
+                tmpfile_path = tmpfile.name
 
-                            # Tambahkan semua file shapefile (.shp, .shx, .dbf, .prj)
-                            for file in os.listdir(tmpdir):
-                                if file.startswith(f"kml_{gname}."):
-                                    zf.write(os.path.join(tmpdir, file), arcname=file)
+            try:
+                gdf_kml = gpd.read_file(tmpfile_path, driver="KML")
+                gdf_kml["source_file"] = uploaded_file.name  # info asal file
+                gdfs.append(gdf_kml)
+                st.success(f"✅ {uploaded_file.name} berhasil dibaca")
+            except Exception as e:
+                st.error(f"❌ Gagal membaca {uploaded_file.name}: {e}")
 
-                st.download_button(
-                    label="⬇️ Download SHP (hasil konversi dari KML)",
-                    data=zip_buffer.getvalue(),
-                    file_name="kml_to_shp.zip",
-                    mime="application/zip"
-                )
+    # Gabungkan semua layer
+    if gdfs:
+        gdf_proyek = gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True), crs=gdfs[0].crs)
 
-        except Exception as e:
-            st.error(f"❌ Gagal membaca KML: {e}")
+        # --- Ringkasan geometry ---
+        geom_counts = gdf_proyek.geometry.geom_type.value_counts()
+        st.write("📊 **Ringkasan geometry dari semua file:**")
+        for gtype, count in geom_counts.items():
+            st.write(f"- {gtype}: {count} fitur")
+
+        # --- Konversi semua KML ke SHP (pisahkan per geometry type) ---
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_buffer = BytesIO()
+
+            geom_types = {
+                "polygon": ["Polygon", "MultiPolygon"],
+                "line": ["LineString", "MultiLineString"],
+                "point": ["Point", "MultiPoint"],
+            }
+
+            with zipfile.ZipFile(zip_buffer, "w") as zf:
+                for gname, gtypes in geom_types.items():
+                    gdf_sub = gdf_proyek[gdf_proyek.geometry.geom_type.isin(gtypes)]
+                    if not gdf_sub.empty:
+                        shp_path = os.path.join(tmpdir, f"all_{gname}.shp")
+                        gdf_sub.to_file(shp_path)
+
+                        for file in os.listdir(tmpdir):
+                            if file.startswith(f"all_{gname}."):
+                                zf.write(os.path.join(tmpdir, file), arcname=file)
+
+            st.download_button(
+                label="⬇️ Download SHP (gabungan dari semua KML/ZIP)",
+                data=zip_buffer.getvalue(),
+                file_name="kmls_to_shp.zip",
+                mime="application/zip"
+            )
 
 # --- Folder Referensi ---
 st.subheader("📂 Shapefile Referensi")
@@ -95,7 +106,6 @@ if uploaded_ref:
 
     st.success("✅ Shapefile referensi berhasil disimpan!")
 
-# List shapefile referensi
 shp_files = [f for f in os.listdir(REFERENSI_DIR) if f.endswith(".shp")]
 selected_refs = st.multiselect("Pilih Shapefile Referensi", shp_files)
 
@@ -112,7 +122,7 @@ basemap_choice = st.selectbox(
     ["OpenStreetMap", "CartoDB Positron", "CartoDB DarkMatter", "Esri Satellite"]
 )
 
-# --- Tampilkan Peta ---
+# --- Peta Interaktif ---
 if gdf_proyek is not None:
     gdf_centroid = gdf_proyek.to_crs(epsg=4326).geometry.centroid
     center = [gdf_centroid.y.mean(), gdf_centroid.x.mean()]
