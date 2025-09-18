@@ -20,48 +20,46 @@ uploaded_files = st.file_uploader(
 )
 
 all_gdfs = []
-file_names = []
+per_shp_zips = []   # simpan hasil per SHP
+per_file_zips = []  # simpan hasil per file KML/ZIP
+all_zip_buffer = BytesIO()
 
 if uploaded_files:
-    zip_buffer_all = BytesIO()
     with tempfile.TemporaryDirectory() as shpdir:
-        with zipfile.ZipFile(zip_buffer_all, "w") as zf_all:
-
+        with zipfile.ZipFile(all_zip_buffer, "w") as zf_all:
             for uploaded_file in uploaded_files:
                 fname, ext = os.path.splitext(uploaded_file.name)
                 ext = ext.lower()
 
                 try:
                     with tempfile.TemporaryDirectory() as tmpdir:
-                        # ================= ZIP (shapefile) =================
+                        # --- ZIP (shapefile) ---
                         if ext == ".zip":
                             zip_path = os.path.join(tmpdir, uploaded_file.name)
                             with open(zip_path, "wb") as f:
                                 f.write(uploaded_file.read())
                             with zipfile.ZipFile(zip_path, "r") as zip_ref:
                                 zip_ref.extractall(tmpdir)
-
                             shp_files = [f for f in os.listdir(tmpdir) if f.endswith(".shp")]
                             if not shp_files:
                                 st.error(f"❌ Tidak ada .shp di {uploaded_file.name}")
                                 continue
                             gdf = gpd.read_file(os.path.join(tmpdir, shp_files[0]))
 
-                        # ================= KML =================
+                        # --- KML ---
                         elif ext == ".kml":
                             kml_path = os.path.join(tmpdir, uploaded_file.name)
                             with open(kml_path, "wb") as f:
                                 f.write(uploaded_file.read())
                             gdf = gpd.read_file(kml_path, driver="KML")
 
-                        # ================= KMZ =================
+                        # --- KMZ ---
                         elif ext == ".kmz":
                             kmz_path = os.path.join(tmpdir, uploaded_file.name)
                             with open(kmz_path, "wb") as f:
                                 f.write(uploaded_file.read())
                             with zipfile.ZipFile(kmz_path, "r") as kmz_ref:
                                 kmz_ref.extractall(tmpdir)
-
                             kml_files = [f for f in os.listdir(tmpdir) if f.endswith(".kml")]
                             if not kml_files:
                                 st.error(f"❌ Tidak ada .kml dalam {uploaded_file.name}")
@@ -72,44 +70,73 @@ if uploaded_files:
                             st.error(f"❌ Format {ext} belum didukung")
                             continue
 
-                        # Tambah kolom nama file sumber
                         gdf["source_file"] = uploaded_file.name
                         all_gdfs.append(gdf)
-                        file_names.append(fname)
 
-                        # Ringkasan geometry per file
+                        # --- Ringkasan geometry per file ---
                         geom_summary = gdf.geometry.geom_type.value_counts().to_dict()
                         st.markdown(f"**📊 Ringkasan geometry dari {uploaded_file.name}:**")
                         for geom, count in geom_summary.items():
                             st.write(f"- {geom}: {count} fitur")
 
-                        # Simpan shapefile hasil konversi (dipisah per geometry type)
+                        # --- Simpan hasil per geometry ---
                         geom_types = {
                             "polygon": ["Polygon", "MultiPolygon"],
                             "line": ["LineString", "MultiLineString"],
                             "point": ["Point", "MultiPoint"],
                         }
 
-                        for gname, gtypes in geom_types.items():
-                            gdf_sub = gdf[gdf.geometry.geom_type.isin(gtypes)]
-                            if not gdf_sub.empty:
-                                shp_path = os.path.join(shpdir, f"{fname}_{gname}.shp")
-                                gdf_sub.to_file(shp_path)
+                        # ZIP untuk file ini
+                        file_zip_buffer = BytesIO()
+                        with zipfile.ZipFile(file_zip_buffer, "w") as zf_file:
+                            for gname, gtypes in geom_types.items():
+                                gdf_sub = gdf[gdf.geometry.geom_type.isin(gtypes)]
+                                if not gdf_sub.empty:
+                                    shp_path = os.path.join(shpdir, f"{fname}_{gname}.shp")
+                                    gdf_sub.to_file(shp_path)
 
-                                # Masukkan ke dalam ZIP besar
-                                for f in os.listdir(shpdir):
-                                    if f.startswith(f"{fname}_{gname}."):
-                                        zf_all.write(os.path.join(shpdir, f), arcname=f)
+                                    # --- ZIP per SHP ---
+                                    shp_zip_buffer = BytesIO()
+                                    with zipfile.ZipFile(shp_zip_buffer, "w") as zf_shp:
+                                        for f in os.listdir(shpdir):
+                                            if f.startswith(f"{fname}_{gname}."):
+                                                file_path = os.path.join(shpdir, f)
+                                                zf_shp.write(file_path, arcname=f)
+                                                zf_file.write(file_path, arcname=f)
+                                                zf_all.write(file_path, arcname=f)
+                                    per_shp_zips.append((f"{fname}_{gname}", shp_zip_buffer.getvalue()))
 
+                        per_file_zips.append((fname, file_zip_buffer.getvalue()))
                         st.success(f"✅ {uploaded_file.name} berhasil diproses")
 
                 except Exception as e:
                     st.error(f"❌ Gagal memproses {uploaded_file.name}: {e}")
 
-    # Download gabungan semua file
+    # --- Download per SHP ---
+    st.subheader("📥 Download Per Shapefile")
+    for shp_name, shp_zip in per_shp_zips:
+        st.download_button(
+            label=f"⬇️ {shp_name}.zip",
+            data=shp_zip,
+            file_name=f"{shp_name}.zip",
+            mime="application/zip"
+        )
+
+    # --- Download per file ---
+    st.subheader("📥 Download Per File")
+    for fname, file_zip in per_file_zips:
+        st.download_button(
+            label=f"⬇️ {fname}.zip",
+            data=file_zip,
+            file_name=f"{fname}.zip",
+            mime="application/zip"
+        )
+
+    # --- Download gabungan ---
+    st.subheader("📥 Download Semua Sekaligus")
     st.download_button(
-        label="⬇️ Download Semua SHP (all_files.zip)",
-        data=zip_buffer_all.getvalue(),
+        label="⬇️ Download all_files.zip",
+        data=all_zip_buffer.getvalue(),
         file_name="all_files.zip",
         mime="application/zip"
     )
@@ -128,7 +155,6 @@ if uploaded_ref:
             f.write(uploaded_ref.read())
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(REFERENSI_DIR)
-
     st.success("✅ Shapefile referensi berhasil disimpan!")
 
 shp_files = [f for f in os.listdir(REFERENSI_DIR) if f.endswith(".shp")]
