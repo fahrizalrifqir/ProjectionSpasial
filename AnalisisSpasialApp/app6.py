@@ -13,6 +13,7 @@ st.title("🌍 Analisis Spasial Interaktif")
 
 # --- Upload Shapefile/KML/KMZ Proyek ---
 st.subheader("📂 Upload Shapefile Proyek (ZIP), KML, atau KMZ")
+
 uploaded_files = st.file_uploader(
     "Upload file .zip (shapefile), .kml, atau .kmz (bisa lebih dari 1)",
     type=["zip", "kml", "kmz"],
@@ -21,7 +22,7 @@ uploaded_files = st.file_uploader(
 
 all_gdfs = []
 per_shp_zips = []   # simpan hasil per SHP
-per_file_zips = []  # simpan hasil per file KML/ZIP
+per_file_zips = []  # simpan hasil per file
 all_zip_buffer = BytesIO()
 
 if uploaded_files:
@@ -64,7 +65,6 @@ if uploaded_files:
                                 st.error(f"❌ Tidak ada .kml dalam {uploaded_file.name}")
                                 continue
                             gdf = gpd.read_file(os.path.join(tmpdir, kml_files[0]), driver="KML")
-
                         else:
                             st.error(f"❌ Format {ext} belum didukung")
                             continue
@@ -74,9 +74,11 @@ if uploaded_files:
 
                         # --- Ringkasan geometry per file ---
                         geom_summary = gdf.geometry.geom_type.value_counts().to_dict()
-                        st.markdown(f"**📊 Ringkasan geometry dari {uploaded_file.name}:**")
+                        st.markdown(f"### 📂 Konversi ke Shapefile")
                         for geom, count in geom_summary.items():
                             st.write(f"- {geom}: {count} fitur")
+
+                        st.success(f"✅ {uploaded_file.name} berhasil diproses")
 
                         # --- Simpan hasil per geometry ---
                         geom_types = {
@@ -108,12 +110,10 @@ if uploaded_files:
 
                             per_file_zips.append((fname, file_zip_buffer.getvalue()))
 
-                        st.success(f"✅ {uploaded_file.name} berhasil diproses")
-
                 except Exception as e:
                     st.error(f"❌ Gagal memproses {uploaded_file.name}: {e}")
 
-    # --- Download section dengan hide/unhide ---
+    # --- Download hasil ---
     st.subheader("📥 Download Hasil")
 
     with st.expander("📦 Download Per Shapefile", expanded=False):
@@ -134,7 +134,7 @@ if uploaded_files:
                 mime="application/zip"
             )
 
-    with st.expander("📦 Download Semua Sekaligus", expanded=True):
+    with st.expander("📦 Download Semua Sekaligus", expanded=False):
         st.download_button(
             label="⬇️ Download all_files.zip",
             data=all_zip_buffer.getvalue(),
