@@ -1,127 +1,78 @@
 import streamlit as st
 import geopandas as gpd
-import os
-import zipfile
-import shutil
+import matplotlib.pyplot as plt
+import contextily as ctx
+import io
 from streamlit_folium import st_folium
 import folium
 
 st.set_page_config(layout="wide")
-st.title("🗺️ Analisis Spasial Interaktif - Overlay Luasan")
+st.title("🗺️ Analisis Spasial Interaktif + Download Peta")
 
-# === Fungsi bantu ===
-def load_geodataframe_from_zip(uploaded_file, upload_dir):
-    """Membaca shapefile dari ZIP dan kembalikan sebagai GeoDataFrame"""
-    try:
-        if os.path.exists(upload_dir):
-            shutil.rmtree(upload_dir)
-        os.makedirs(upload_dir, exist_ok=True)
+# Contoh data (ganti dengan load shapefile kamu)
+gdf = gpd.read_file(gpd.datasets.get_path("naturalearth_lowres"))
+gdf = gdf.to_crs(epsg=3857)
 
-        zip_path = os.path.join(upload_dir, uploaded_file.name)
-        with open(zip_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+# ========================
+# 1. Peta Interaktif (Folium)
+# ========================
+st.subheader("🌍 Peta Interaktif (bisa digeser/zoom)")
+m = folium.Map(location=[0, 120], zoom_start=4, tiles="Esri.WorldImagery")
 
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(upload_dir)
+folium.GeoJson(
+    gdf,
+    name="Data",
+    style_function=lambda x: {"color": "purple", "fillOpacity": 0.4}
+).add_to(m)
 
-        shp_files = [f for f in os.listdir(upload_dir) if f.endswith(".shp")]
-        if not shp_files:
-            return None, "Tidak ada file .shp dalam ZIP"
+folium.LayerControl().add_to(m)
+st_folium(m, width=900, height=600)
 
-        shp_path = os.path.join(upload_dir, shp_files[0])
-        gdf = gpd.read_file(shp_path)
-        return gdf, None
+# ========================
+# 2. Peta Statis (Matplotlib)
+# ========================
+st.subheader("🖼️ Peta Statis untuk Download")
 
-    except Exception as e:
-        return None, f"Gagal memproses file: {e}"
+fig, ax = plt.subplots(figsize=(8, 8))
+gdf.plot(ax=ax, color="purple", alpha=0.5)
+ctx.add_basemap(ax, crs=gdf.crs, source=ctx.providers.Esri.WorldImagery)
+ax.set_axis_off()
+st.pyplot(fig)
 
-# === Input utama ===
-uploaded_file = st.file_uploader("📂 Upload Shapefile Tapak (ZIP)", type="zip")
+# ========================
+# 3. Tombol Download
+# ========================
+# Simpan ke buffer
+img_buffer = io.BytesIO()
+fig.savefig(img_buffer, format="png", dpi=300, bbox_inches="tight")
+img_buffer.seek(0)
 
-st.subheader("Pilih atau Unggah Shapefile Referensi")
-script_dir = os.path.dirname(os.path.abspath(__file__))
-REFERENSI_DIR = os.path.join(script_dir, "referensi")
+# Download sebagai PNG
+st.download_button(
+    label="📥 Download Peta (PNG)",
+    data=img_buffer,
+    file_name="peta.png",
+    mime="image/png"
+)
 
-referensi_files = []
-try:
-    referensi_files = [f for f in os.listdir(REFERENSI_DIR) if f.endswith(".shp")]
-except FileNotFoundError:
-    st.warning("⚠️ Folder 'referensi' belum ada")
+# Download sebagai JPEG
+img_buffer_jpg = io.BytesIO()
+fig.savefig(img_buffer_jpg, format="jpeg", dpi=300, bbox_inches="tight")
+img_buffer_jpg.seek(0)
+st.download_button(
+    label="📥 Download Peta (JPEG)",
+    data=img_buffer_jpg,
+    file_name="peta.jpeg",
+    mime="image/jpeg"
+)
 
-referensi_options = ["Unggah file sendiri"] + sorted(referensi_files)
-referensi_choice = st.selectbox("Pilih Shapefile Referensi", referensi_options)
-
-uploaded_referensi_file = None
-if referensi_choice == "Unggah file sendiri":
-    uploaded_referensi_file = st.file_uploader("Unggah Shapefile Referensi (ZIP)", type="zip")
-
-# Pilihan basemap
-basemap_options = {
-    "OpenStreetMap": "OpenStreetMap",
-    "ESRI Satelit": "Esri.WorldImagery",
-    "Carto Positron": "CartoDB.Positron"
-}
-basemap_choice = st.selectbox("Pilih Basemap", list(basemap_options.keys()))
-
-# === Proses data ===
-if uploaded_file is not None:
-    tapak, error_tapak = load_geodataframe_from_zip(uploaded_file, "uploads")
-    if error_tapak:
-        st.error(f"❌ Error pada file tapak: {error_tapak}")
-        st.stop()
-
-    # Referensi
-    referensi = None
-    if referensi_choice == "Unggah file sendiri":
-        if uploaded_referensi_file:
-            referensi, error_ref = load_geodataframe_from_zip(uploaded_referensi_file, "uploaded_referensi")
-            if error_ref:
-                st.error(f"❌ Error referensi: {error_ref}")
-                st.stop()
-        else:
-            st.warning("⚠️ Silakan unggah shapefile referensi.")
-            st.stop()
-    else:
-        referensi_path = os.path.join(REFERENSI_DIR, referensi_choice)
-        referensi = gpd.read_file(referensi_path)
-
-    # Proyeksi ke WGS84 biar cocok folium
-    tapak = tapak.to_crs(epsg=4326)
-    referensi = referensi.to_crs(epsg=4326)
-
-    # Hitung luas
-    tapak["luas_m2"] = tapak.to_crs(epsg=32750).geometry.area  # contoh zona UTM 50S
-    overlay = gpd.overlay(tapak, referensi, how="intersection", keep_geom_type=True)
-    overlay["luas_m2"] = overlay.to_crs(epsg=32750).geometry.area
-
-    # Tampilkan hasil luas
-    st.subheader("📊 Hasil Luasan")
-    st.write(f"**Luas Tapak Proyek (m²):** {tapak['luas_m2'].sum():,.2f}")
-    st.write(f"**Luas Overlay (m²):** {overlay['luas_m2'].sum():,.2f}")
-
-    # === Peta Interaktif ===
-    st.subheader("🌍 Peta Interaktif")
-    center = [tapak.geometry.centroid.y.mean(), tapak.geometry.centroid.x.mean()]
-    m = folium.Map(location=center, zoom_start=13, tiles=basemap_options[basemap_choice])
-
-    folium.GeoJson(
-        referensi,
-        name="Referensi",
-        style_function=lambda x: {"color": "black", "weight": 1}
-    ).add_to(m)
-
-    folium.GeoJson(
-        tapak,
-        name="Tapak Proyek",
-        style_function=lambda x: {"color": "purple", "fillOpacity": 0.4}
-    ).add_to(m)
-
-    if not overlay.empty:
-        folium.GeoJson(
-            overlay,
-            name="Overlay",
-            style_function=lambda x: {"color": "red", "fillOpacity": 0.6}
-        ).add_to(m)
-
-    folium.LayerControl().add_to(m)
-    st_folium(m, width=900, height=600)
+# Download sebagai PDF
+pdf_buffer = io.BytesIO()
+fig.savefig(pdf_buffer, format="pdf", dpi=300, bbox_inches="tight")
+pdf_buffer.seek(0)
+st.download_button(
+    label="📥 Download Peta (PDF)",
+    data=pdf_buffer,
+    file_name="peta.pdf",
+    mime="application/pdf"
+)
