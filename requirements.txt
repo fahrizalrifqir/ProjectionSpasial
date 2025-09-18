@@ -2,3 +2,7 @@ streamlit
 geopandas
 matplotlib
 contextily
+folium
+streamlit-folium
+shapely
+fiona
