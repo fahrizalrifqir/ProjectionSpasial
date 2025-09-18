@@ -8,3 +8,7 @@ shapely
 fiona
 pyproj
 geodatasets
+streamlit
+geopandas
+folium
+streamlit-folium
