@@ -21,8 +21,8 @@ uploaded_files = st.file_uploader(
 )
 
 all_gdfs = []
-per_shp_zips = []   # simpan hasil per SHP
-per_file_zips = []  # simpan hasil per file
+per_shp_zips = []
+per_file_zips = []
 all_zip_buffer = BytesIO()
 
 if uploaded_files:
@@ -33,7 +33,7 @@ if uploaded_files:
                 ext = ext.lower()
                 try:
                     with tempfile.TemporaryDirectory() as tmpdir:
-                        # --- ZIP (shapefile) ---
+                        # --- ZIP ---
                         if ext == ".zip":
                             zip_path = os.path.join(tmpdir, uploaded_file.name)
                             with open(zip_path, "wb") as f:
@@ -85,11 +85,19 @@ if uploaded_files:
 
                         st.success(f"✅ {uploaded_file.name} berhasil diproses")
 
-                        # --- Hitung luas ---
+                        # --- Pilihan zona UTM ---
                         st.markdown("**📐 Hitung Luas (m² dan Ha)**")
-                        # Pilih zona UTM
-                        utm_zone = st.number_input("Masukkan zona UTM (contoh: 48 untuk Jawa Barat)", min_value=1, max_value=60, value=48)
-                        utm_crs = f"EPSG:327{utm_zone}"  # pakai WGS84 UTM selatan
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            utm_zone = st.number_input("Zona UTM", min_value=1, max_value=60, value=48)
+                        with col2:
+                            hemisphere = st.selectbox("Belahan", ["S", "N"])  # default S untuk Indonesia
+
+                        if hemisphere == "N":
+                            utm_crs = f"EPSG:326{utm_zone:02d}"
+                        else:
+                            utm_crs = f"EPSG:327{utm_zone:02d}"
+
                         try:
                             gdf_utm = gdf.to_crs(utm_crs)
                             gdf["Luas_m2"] = gdf_utm.area
@@ -183,6 +191,31 @@ for ref_file in selected_refs:
     ref_path = os.path.join(REFERENSI_DIR, ref_file)
     if os.path.exists(ref_path):
         gdf_refs.append(gpd.read_file(ref_path))
+
+# --- Hitung overlap luas dengan referensi ---
+if all_gdfs and gdf_refs:
+    st.markdown("### 📐 Luas Overlap dengan Referensi")
+    gdf_proyek = gpd.GeoDataFrame(pd.concat(all_gdfs, ignore_index=True), crs=all_gdfs[0].crs)
+    for i, gdf_ref in enumerate(gdf_refs):
+        try:
+            # samakan CRS
+            if gdf_ref.crs != gdf_proyek.crs:
+                gdf_ref = gdf_ref.to_crs(gdf_proyek.crs)
+            overlap = gpd.overlay(gdf_proyek, gdf_ref, how="intersection")
+            if not overlap.empty:
+                # gunakan UTM dari pilihan user (default zona 48S)
+                utm_zone = 48
+                hemisphere = "S"
+                utm_crs = f"EPSG:{326 if hemisphere=='N' else 327}{utm_zone:02d}"
+                overlap_utm = overlap.to_crs(utm_crs)
+                overlap["Luas_m2"] = overlap_utm.area
+                overlap["Luas_Ha"] = overlap["Luas_m2"] / 10000
+                st.write(f"Referensi {i+1}: {selected_refs[i]}")
+                st.dataframe(overlap[["Luas_m2", "Luas_Ha"]])
+            else:
+                st.info(f"Tidak ada overlap dengan {selected_refs[i]}")
+        except Exception as e:
+            st.warning(f"⚠️ Gagal menghitung overlap dengan {selected_refs[i]}: {e}")
 
 # --- Pilih Basemap ---
 st.subheader("🗺️ Pilih Basemap")
