@@ -10,7 +10,7 @@ import shutil
 @st.cache_data
 def load_geodataframe_from_zip(uploaded_file, folder_name="uploads"):
     try:
-        # Gunakan path absolut biar aman
+        # Gunakan path absolut
         base_dir = os.path.dirname(os.path.abspath(__file__))
         upload_dir = os.path.join(base_dir, folder_name)
 
@@ -19,7 +19,7 @@ def load_geodataframe_from_zip(uploaded_file, folder_name="uploads"):
             shutil.rmtree(upload_dir)
         os.makedirs(upload_dir, exist_ok=True)
 
-        # Simpan dan ekstrak file ZIP
+        # Simpan & ekstrak file ZIP
         zip_path = os.path.join(upload_dir, uploaded_file.name)
         with open(zip_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
@@ -46,14 +46,14 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 REFERENSI_DIR = os.path.join(script_dir, "referensi")
 
 # Tombol bersihkan cache
-if st.button("Bersihkan Cache dan Muat Ulang"):
+if st.button("🔄 Bersihkan Cache & Muat Ulang"):
     st.cache_data.clear()
     st.rerun()
 
 # ================= Input Utama =================
-uploaded_file = st.file_uploader("Upload Shapefile Tapak Proyek (ZIP)", type="zip")
+uploaded_file = st.file_uploader("📂 Upload Shapefile Tapak Proyek (ZIP)", type="zip")
 
-st.subheader("Pilih atau Unggah Shapefile Referensi")
+st.subheader("📂 Pilih atau Unggah Shapefile Referensi")
 referensi_files = []
 try:
     referensi_files = [f for f in os.listdir(REFERENSI_DIR) if f.endswith(".shp")]
@@ -79,7 +79,10 @@ basemap_options = {
     "ESRI Satelit": ctx.providers.Esri.WorldImagery,
     "Carto Positron": ctx.providers.CartoDB.Positron,
 }
-basemap_choice = st.selectbox("Pilih Basemap", list(basemap_options.keys()))
+basemap_choice = st.selectbox("🗺️ Pilih Basemap", list(basemap_options.keys()))
+
+# Slider zoom untuk basemap
+zoom_level = st.slider("🔍 Pilih Zoom Level Basemap", 10, 18, 14)
 
 # ================= Analisis =================
 if uploaded_file is not None:
@@ -90,7 +93,6 @@ if uploaded_file is not None:
         st.stop()
 
     # Load Referensi
-    referensi_path = None
     if referensi_choice == "Unggah file sendiri":
         if uploaded_referensi_file:
             referensi, error_ref = load_geodataframe_from_zip(uploaded_referensi_file, "uploaded_referensi")
@@ -98,7 +100,7 @@ if uploaded_file is not None:
                 st.error(f"❌ Error pada file referensi: {error_ref}")
                 st.stop()
         else:
-            st.warning("Silakan unggah file referensi.")
+            st.warning("⚠️ Silakan unggah file referensi.")
             st.stop()
     else:
         referensi_path = os.path.join(REFERENSI_DIR, referensi_choice)
@@ -126,31 +128,46 @@ if uploaded_file is not None:
     st.write(f"**Luas Overlay (m²):** {luas_overlay_str}")
 
     # ================= Peta Overlay =================
-    st.subheader("Peta Overlay")
-    fig, ax = plt.subplots(figsize=(8, 8))  # lebih kecil supaya proporsional
+    st.subheader("🗺️ Peta Overlay")
 
-    referensi.boundary.plot(ax=ax, color="black", linewidth=0.5, label="Referensi")
-    tapak.plot(ax=ax, color="purple", alpha=0.5, label="Tapak Proyek")
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.set_facecolor("#f8f9fa")  # background lebih soft
+
+    # Plot layer
+    referensi.boundary.plot(ax=ax, color="black", linewidth=1, label="Referensi")
+    tapak.plot(ax=ax, color="#6a0dad", alpha=0.5, edgecolor="black", label="Tapak Proyek")
     if not overlay.empty:
-        overlay.plot(ax=ax, color="red", alpha=0.7, label="Overlay")
+        overlay.plot(ax=ax, color="red", alpha=0.7, edgecolor="black", label="Overlay")
 
-    # Zoom otomatis ke tapak
+    # Zoom otomatis
     minx, miny, maxx, maxy = tapak.total_bounds
     buffer = 1000
     ax.set_xlim(minx - buffer, maxx + buffer)
     ax.set_ylim(miny - buffer, maxy + buffer)
 
-    # Tambahkan basemap dengan zoom tinggi
+    # Tambahkan basemap
     try:
         ctx.add_basemap(
             ax,
             source=basemap_options[basemap_choice],
             crs=tapak.crs.to_string(),
-            zoom=14  # resolusi tinggi
+            zoom=zoom_level
         )
     except Exception as e:
         st.warning(f"⚠️ Gagal memuat basemap {basemap_choice}. Error: {e}")
 
-    ax.legend()
-    ax.set_title("Peta Overlay", fontsize=14)
+    # Legend di luar plot
+    ax.legend(
+        loc="upper left",
+        bbox_to_anchor=(1.05, 1),
+        frameon=True,
+        facecolor="white",
+        framealpha=0.8
+    )
+
+    # Hilangkan angka koordinat (biar lebih clean)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_title("Peta Overlay Tapak vs Referensi", fontsize=16, fontweight="bold")
+
     st.pyplot(fig)
