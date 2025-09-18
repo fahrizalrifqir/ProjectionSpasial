@@ -9,29 +9,39 @@ import tempfile
 st.set_page_config(page_title="Analisis Spasial Interaktif", layout="wide")
 st.title("🌍 Analisis Spasial Interaktif")
 
-# =========================
-# Upload Shapefile Proyek
-# =========================
-st.subheader("📂 Upload Shapefile Proyek (ZIP)")
-uploaded_file = st.file_uploader("Upload file .zip berisi shapefile proyek", type="zip")
+# --- Upload Shapefile Proyek ---
+st.subheader("📂 Upload Shapefile Proyek (ZIP atau KML)")
+uploaded_file = st.file_uploader("Upload file .zip (shapefile) atau .kml", type=["zip", "kml"])
 
 gdf_proyek = None
 if uploaded_file:
-    with tempfile.TemporaryDirectory() as tmpdir:
-        zip_path = os.path.join(tmpdir, "proyek.zip")
-        with open(zip_path, "wb") as f:
-            f.write(uploaded_file.read())
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(tmpdir)
+    ext = os.path.splitext(uploaded_file.name)[1].lower()
 
-        for file in os.listdir(tmpdir):
-            if file.endswith(".shp"):
-                gdf_proyek = gpd.read_file(os.path.join(tmpdir, file))
-                break
+    if ext == ".zip":  # Shapefile ZIP
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_path = os.path.join(tmpdir, "proyek.zip")
+            with open(zip_path, "wb") as f:
+                f.write(uploaded_file.read())
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                zip_ref.extractall(tmpdir)
 
-# =========================
-# Shapefile Referensi
-# =========================
+            for file in os.listdir(tmpdir):
+                if file.endswith(".shp"):
+                    gdf_proyek = gpd.read_file(os.path.join(tmpdir, file))
+                    break
+
+    elif ext == ".kml":  # File KML
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".kml") as tmpfile:
+            tmpfile.write(uploaded_file.read())
+            tmpfile_path = tmpfile.name
+
+        try:
+            gdf_proyek = gpd.read_file(tmpfile_path, driver="KML")
+            st.success("✅ KML berhasil dibaca dan dikonversi ke GeoDataFrame")
+        except Exception as e:
+            st.error(f"❌ Gagal membaca KML: {e}")
+
+# --- Folder Referensi ---
 st.subheader("📂 Shapefile Referensi")
 REFERENSI_DIR = "referensi"
 if not os.path.exists(REFERENSI_DIR):
@@ -46,15 +56,12 @@ if uploaded_ref:
             f.write(uploaded_ref.read())
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(REFERENSI_DIR)
+
     st.success("✅ Shapefile referensi berhasil disimpan!")
 
-# List shapefile referensi
+# List semua shapefile referensi
 shp_files = [f for f in os.listdir(REFERENSI_DIR) if f.endswith(".shp")]
-selected_refs = st.multiselect(
-    "Pilih Shapefile Referensi",
-    shp_files,
-    default=shp_files[:1] if shp_files else None
-)
+selected_refs = st.multiselect("Pilih Shapefile Referensi", shp_files)
 
 gdf_refs = []
 for ref_file in selected_refs:
@@ -62,81 +69,50 @@ for ref_file in selected_refs:
     if os.path.exists(ref_path):
         gdf_refs.append(gpd.read_file(ref_path))
 
-# =========================
-# Pilihan Zona UTM
-# =========================
-st.subheader("📐 Pilih Proyeksi UTM untuk Analisis")
-col1, col2 = st.columns(2)
-with col1:
-    utm_zone = st.number_input("Zona UTM", min_value=1, max_value=60, value=48, step=1)
-with col2:
-    hemisphere = st.radio("Belahan Bumi", ["N", "S"], index=0)
-
-if hemisphere == "N":
-    epsg_code = 32600 + utm_zone
-else:
-    epsg_code = 32700 + utm_zone
-
-st.info(f"EPSG yang dipakai: **{epsg_code}**")
-
-# =========================
-# Pilihan Basemap
-# =========================
+# --- Pilih Basemap ---
 st.subheader("🗺️ Pilih Basemap")
 basemap_choice = st.selectbox(
     "Pilih jenis basemap",
-    ["OpenStreetMap", "CartoDB Positron", "CartoDB DarkMatter", "Esri Satellite", "Esri World Imagery"]
+    ["OpenStreetMap", "CartoDB Positron", "CartoDB DarkMatter", "Esri Satellite"]
 )
 
-# Mapping pilihan ke Folium
-basemap_dict = {
-    "OpenStreetMap": "OpenStreetMap",
-    "CartoDB Positron": "CartoDB positron",
-    "CartoDB DarkMatter": "CartoDB dark_matter",
-    "Esri Satellite": "Esri Satellite",
-    "Esri World Imagery": "Esri.WorldImagery"
-}
-
-# =========================
-# Peta Interaktif Folium
-# =========================
 if gdf_proyek is not None:
-    st.subheader("🗺️ Peta Interaktif")
-
-    # Gunakan centroid proyek sebagai center map
     gdf_centroid = gdf_proyek.to_crs(epsg=4326).geometry.centroid
     center = [gdf_centroid.y.mean(), gdf_centroid.x.mean()]
+    m = folium.Map(location=center, zoom_start=12)
 
-    m = folium.Map(location=center, zoom_start=12, tiles=basemap_dict[basemap_choice])
+    # Tambahkan basemap
+    if basemap_choice == "OpenStreetMap":
+        folium.TileLayer("OpenStreetMap").add_to(m)
+    elif basemap_choice == "CartoDB Positron":
+        folium.TileLayer("CartoDB positron").add_to(m)
+    elif basemap_choice == "CartoDB DarkMatter":
+        folium.TileLayer("CartoDB dark_matter").add_to(m)
+    elif basemap_choice == "Esri Satellite":
+        folium.TileLayer(
+            tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+            attr="Tiles © Esri &mdash; Source: Esri, USGS, NOAA",
+            name="Esri Satellite",
+            overlay=False,
+            control=True
+        ).add_to(m)
 
-    # Tambahkan proyek
-    proyek_fields = [c for c in gdf_proyek.columns if c != "geometry"]
+    # Tambahkan proyek ke peta
     folium.GeoJson(
         gdf_proyek.to_crs(epsg=4326),
         name="Proyek",
-        style_function=lambda x: {
-            "fillColor": "purple",
-            "color": "black",
-            "weight": 2,
-            "fillOpacity": 0.5,
-        },
-        tooltip=folium.GeoJsonTooltip(fields=proyek_fields),
+        style_function=lambda x: {"color": "purple", "fillOpacity": 0.5},
     ).add_to(m)
 
-    # Tambahkan referensi
+    # Tambahkan referensi ke peta
     for i, gdf_ref in enumerate(gdf_refs):
-        ref_fields = [c for c in gdf_ref.columns if c != "geometry"]
         folium.GeoJson(
             gdf_ref.to_crs(epsg=4326),
             name=f"Referensi {i+1}",
-            style_function=lambda x: {
-                "fillColor": "none",
-                "color": "gray",
-                "weight": 1,
-            },
-            tooltip=folium.GeoJsonTooltip(fields=ref_fields),
+            style_function=lambda x: {"color": "gray", "fillOpacity": 0},
         ).add_to(m)
 
     folium.LayerControl().add_to(m)
 
+    st.subheader("🗺️ Peta Interaktif")
     st_folium(m, width=900, height=600)
