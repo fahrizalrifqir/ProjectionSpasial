@@ -15,9 +15,7 @@ st.set_page_config(layout="wide")
 st.title("🗺️ Analisis Spasial - Overlay Luasan")
 
 # === Jalur yang disesuaikan untuk GitHub dan lokal ===
-# Dapatkan jalur absolut dari direktori skrip saat ini untuk memastikan portabilitas
 script_dir = os.path.dirname(os.path.abspath(__file__))
-# Gabungkan dengan nama folder referensi
 REFERENSI_DIR = os.path.join(script_dir, "referensi")
 
 # === Input widget utama ===
@@ -53,7 +51,6 @@ basemap_choice = st.selectbox("Pilih Basemap", list(basemap_options.keys()))
 
 # === Plotting dan analisis hanya akan berjalan jika file diunggah ===
 if uploaded_file is not None:
-    # Logika untuk menyimpan dan mengekstrak file tapak proyek
     upload_dir = "uploads"
     os.makedirs(upload_dir, exist_ok=True)
     zip_path = os.path.join(upload_dir, uploaded_file.name)
@@ -69,7 +66,6 @@ if uploaded_file is not None:
         shp_path = os.path.join(upload_dir, shp_files[0])
         referensi_path = None
         
-        # Logika untuk menentukan jalur file referensi
         if referensi_choice == "Unggah file sendiri":
             if uploaded_referensi_file:
                 referensi_upload_dir = "uploaded_referensi"
@@ -90,7 +86,6 @@ if uploaded_file is not None:
         else:
             referensi_path = os.path.join(REFERENSI_DIR, referensi_choice)
         
-        # Lanjutkan jika kedua file sudah siap
         if shp_path and referensi_path:
             tapak = load_geodataframe(shp_path)
             referensi = load_geodataframe(referensi_path)
@@ -113,16 +108,20 @@ if uploaded_file is not None:
             
             # --- Kode Plotting ---
             st.subheader("Peta Overlay")
-            fig, ax = plt.subplots(figsize=(12, 12))
+            fig, ax = plt.subplots(figsize=(10, 10))
             
-            # Tambahkan basemap sebelum data geospasial diplot
-            ctx.add_basemap(ax, source=basemap_options[basemap_choice], crs=tapak.crs.to_string())
-            
+            # PENTING: Menambahkan try-except di sini untuk menangani kegagalan pemuatan basemap
+            try:
+                ctx.add_basemap(ax, source=basemap_options[basemap_choice], crs=tapak.crs.to_string())
+            except Exception as e:
+                st.warning(f"⚠️ Gagal memuat basemap: {basemap_choice}. Menampilkan peta tanpa basemap. Error: {e}")
+
             referensi.boundary.plot(ax=ax, color="black", linewidth=0.5, label="Referensi")
             tapak.plot(ax=ax, color="purple", alpha=0.5, label="Tapak Proyek")
             if not overlay.empty:
                 overlay.plot(ax=ax, color="red", alpha=0.7, label="Overlay")
             
+            # Mengatur batas plot secara eksplisit untuk mencegah skala tidak terkontrol
             ax.set_xlim(tapak.total_bounds[0] - 500, tapak.total_bounds[2] + 500)
             ax.set_ylim(tapak.total_bounds[1] - 500, tapak.total_bounds[3] + 500)
             
