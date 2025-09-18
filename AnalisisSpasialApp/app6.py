@@ -5,6 +5,7 @@ from streamlit_folium import st_folium
 import os
 import zipfile
 import tempfile
+from io import BytesIO
 
 st.set_page_config(page_title="Analisis Spasial Interaktif", layout="wide")
 st.title("🌍 Analisis Spasial Interaktif")
@@ -38,6 +39,25 @@ if uploaded_file:
         try:
             gdf_proyek = gpd.read_file(tmpfile_path, driver="KML")
             st.success("✅ KML berhasil dibaca dan dikonversi ke GeoDataFrame")
+
+            # --- Konversi KML ke SHP & buat ZIP untuk download ---
+            with tempfile.TemporaryDirectory() as tmpdir:
+                shp_path = os.path.join(tmpdir, "kml_to_shp.shp")
+                gdf_proyek.to_file(shp_path)
+
+                # Masukkan semua file shapefile ke dalam zip
+                zip_buffer = BytesIO()
+                with zipfile.ZipFile(zip_buffer, "w") as zf:
+                    for file in os.listdir(tmpdir):
+                        zf.write(os.path.join(tmpdir, file), arcname=file)
+
+                st.download_button(
+                    label="⬇️ Download SHP (hasil konversi dari KML)",
+                    data=zip_buffer.getvalue(),
+                    file_name="kml_to_shp.zip",
+                    mime="application/zip"
+                )
+
         except Exception as e:
             st.error(f"❌ Gagal membaca KML: {e}")
 
