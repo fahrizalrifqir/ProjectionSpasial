@@ -1,14 +1,9 @@
 streamlit
 geopandas
-matplotlib
-contextily
 folium
 streamlit-folium
 shapely
-fiona
 pyproj
-geodatasets
-streamlit
-geopandas
-folium
-streamlit-folium
+fiona
+matplotlib
+contextily
