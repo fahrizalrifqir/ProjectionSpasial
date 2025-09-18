@@ -30,7 +30,6 @@ if uploaded_files:
             for uploaded_file in uploaded_files:
                 fname, ext = os.path.splitext(uploaded_file.name)
                 ext = ext.lower()
-
                 try:
                     with tempfile.TemporaryDirectory() as tmpdir:
                         # --- ZIP (shapefile) ---
@@ -104,42 +103,44 @@ if uploaded_files:
                                                 zf_shp.write(file_path, arcname=f)
                                                 zf_file.write(file_path, arcname=f)
                                                 zf_all.write(file_path, arcname=f)
+
                                     per_shp_zips.append((f"{fname}_{gname}", shp_zip_buffer.getvalue()))
 
-                        per_file_zips.append((fname, file_zip_buffer.getvalue()))
+                            per_file_zips.append((fname, file_zip_buffer.getvalue()))
+
                         st.success(f"✅ {uploaded_file.name} berhasil diproses")
 
                 except Exception as e:
                     st.error(f"❌ Gagal memproses {uploaded_file.name}: {e}")
 
-    # --- Download per SHP ---
-    st.subheader("📥 Download Per Shapefile")
-    for shp_name, shp_zip in per_shp_zips:
+    # --- Download section dengan hide/unhide ---
+    st.subheader("📥 Download Hasil")
+
+    with st.expander("📦 Download Per Shapefile", expanded=False):
+        for shp_name, shp_zip in per_shp_zips:
+            st.download_button(
+                label=f"⬇️ {shp_name}.zip",
+                data=shp_zip,
+                file_name=f"{shp_name}.zip",
+                mime="application/zip"
+            )
+
+    with st.expander("📂 Download Per File", expanded=False):
+        for fname, file_zip in per_file_zips:
+            st.download_button(
+                label=f"⬇️ {fname}.zip",
+                data=file_zip,
+                file_name=f"{fname}.zip",
+                mime="application/zip"
+            )
+
+    with st.expander("📦 Download Semua Sekaligus", expanded=True):
         st.download_button(
-            label=f"⬇️ {shp_name}.zip",
-            data=shp_zip,
-            file_name=f"{shp_name}.zip",
+            label="⬇️ Download all_files.zip",
+            data=all_zip_buffer.getvalue(),
+            file_name="all_files.zip",
             mime="application/zip"
         )
-
-    # --- Download per file ---
-    st.subheader("📥 Download Per File")
-    for fname, file_zip in per_file_zips:
-        st.download_button(
-            label=f"⬇️ {fname}.zip",
-            data=file_zip,
-            file_name=f"{fname}.zip",
-            mime="application/zip"
-        )
-
-    # --- Download gabungan ---
-    st.subheader("📥 Download Semua Sekaligus")
-    st.download_button(
-        label="⬇️ Download all_files.zip",
-        data=all_zip_buffer.getvalue(),
-        file_name="all_files.zip",
-        mime="application/zip"
-    )
 
 # --- Folder Referensi ---
 st.subheader("📂 Shapefile Referensi")
@@ -178,6 +179,7 @@ if all_gdfs:
     gdf_proyek = gpd.GeoDataFrame(pd.concat(all_gdfs, ignore_index=True), crs=all_gdfs[0].crs)
     gdf_centroid = gdf_proyek.to_crs(epsg=4326).geometry.centroid
     center = [gdf_centroid.y.mean(), gdf_centroid.x.mean()]
+
     m = folium.Map(location=center, zoom_start=8)
 
     # Basemap
