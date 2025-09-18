@@ -15,9 +15,7 @@ st.set_page_config(layout="wide")
 st.title("🗺️ Analisis Spasial - Overlay Luasan")
 
 # === Jalur yang disesuaikan untuk GitHub dan lokal ===
-# Dapatkan jalur absolut dari direktori skrip saat ini
 script_dir = os.path.dirname(os.path.abspath(__file__))
-# Gabungkan dengan nama folder referensi
 REFERENSI_DIR = os.path.join(script_dir, "referensi")
 
 # === Input widget utama ===
@@ -106,7 +104,6 @@ if uploaded_file is not None:
 
             st.subheader("📊 Hasil Luasan")
             
-            # --- PERBAIKAN FORMAT ANGKA DI SINI ---
             luas_tapak_str = f"{tapak['luas_m2'].sum():,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
             luas_overlay_str = f"{overlay['luas_m2'].sum():,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
             
@@ -118,6 +115,9 @@ if uploaded_file is not None:
             
             fig, ax = plt.subplots(figsize=(10, 10))
             
+            # PENTING: Menambahkan ax.set_aspect('equal') untuk menjaga proporsi
+            ax.set_aspect('equal')
+
             try:
                 ctx.add_basemap(ax, source=basemap_options[basemap_choice], crs=tapak.crs.to_string())
             except Exception as e:
