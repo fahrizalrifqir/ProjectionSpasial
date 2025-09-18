@@ -73,4 +73,84 @@ if referensi_choice == "Unggah file sendiri":
 zona = st.number_input("Masukkan zona UTM (46 - 54)", min_value=46, max_value=54, value=50)
 hemisphere = st.radio("Pilih Hemisfer", ["S", "N"])
 
-#
+# Basemap options
+basemap_options = {
+    "OpenStreetMap": ctx.providers.OpenStreetMap.Mapnik,
+    "ESRI Satelit": ctx.providers.Esri.WorldImagery,
+    "Carto Positron": ctx.providers.CartoDB.Positron,
+}
+basemap_choice = st.selectbox("Pilih Basemap", list(basemap_options.keys()))
+
+# ================= Analisis =================
+if uploaded_file is not None:
+    # Load Tapak
+    tapak, error_tapak = load_geodataframe_from_zip(uploaded_file, "uploads")
+    if error_tapak:
+        st.error(f"❌ Error pada file tapak: {error_tapak}")
+        st.stop()
+
+    # Load Referensi
+    referensi_path = None
+    if referensi_choice == "Unggah file sendiri":
+        if uploaded_referensi_file:
+            referensi, error_ref = load_geodataframe_from_zip(uploaded_referensi_file, "uploaded_referensi")
+            if error_ref:
+                st.error(f"❌ Error pada file referensi: {error_ref}")
+                st.stop()
+        else:
+            st.warning("Silakan unggah file referensi.")
+            st.stop()
+    else:
+        referensi_path = os.path.join(REFERENSI_DIR, referensi_choice)
+        referensi = gpd.read_file(referensi_path)
+
+    # Reproject ke UTM
+    epsg_code = f"326{zona}" if hemisphere == "N" else f"327{zona}"
+    try:
+        tapak = tapak.to_crs(epsg=epsg_code)
+        referensi = referensi.to_crs(epsg=epsg_code)
+    except Exception as e:
+        st.error(f"❌ Error proyeksi ulang: {e}")
+        st.stop()
+
+    # Hitung Luas
+    tapak["luas_m2"] = tapak.geometry.area
+    overlay = gpd.overlay(tapak, referensi, how="intersection", keep_geom_type=True)
+    overlay["luas_m2"] = overlay.geometry.area
+
+    # ================= Hasil Luasan =================
+    st.subheader("📊 Hasil Luasan")
+    luas_tapak_str = f"{tapak['luas_m2'].sum():,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    luas_overlay_str = f"{overlay['luas_m2'].sum():,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    st.write(f"**Luas Tapak Proyek (m²):** {luas_tapak_str}")
+    st.write(f"**Luas Overlay (m²):** {luas_overlay_str}")
+
+    # ================= Peta Overlay =================
+    st.subheader("Peta Overlay")
+    fig, ax = plt.subplots(figsize=(8, 8))  # lebih kecil supaya proporsional
+
+    referensi.boundary.plot(ax=ax, color="black", linewidth=0.5, label="Referensi")
+    tapak.plot(ax=ax, color="purple", alpha=0.5, label="Tapak Proyek")
+    if not overlay.empty:
+        overlay.plot(ax=ax, color="red", alpha=0.7, label="Overlay")
+
+    # Zoom otomatis ke tapak
+    minx, miny, maxx, maxy = tapak.total_bounds
+    buffer = 1000
+    ax.set_xlim(minx - buffer, maxx + buffer)
+    ax.set_ylim(miny - buffer, maxy + buffer)
+
+    # Tambahkan basemap dengan zoom tinggi
+    try:
+        ctx.add_basemap(
+            ax,
+            source=basemap_options[basemap_choice],
+            crs=tapak.crs.to_string(),
+            zoom=14  # resolusi tinggi
+        )
+    except Exception as e:
+        st.warning(f"⚠️ Gagal memuat basemap {basemap_choice}. Error: {e}")
+
+    ax.legend()
+    ax.set_title("Peta Overlay", fontsize=14)
+    st.pyplot(fig)
