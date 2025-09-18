@@ -1,14 +1,14 @@
 import streamlit as st
 import geopandas as gpd
-import matplotlib.pyplot as plt
-import contextily as ctx
+import folium
+from streamlit_folium import st_folium
 import os
 import zipfile
 import tempfile
 
 # --- Konfigurasi Halaman ---
 st.set_page_config(page_title="Analisis Spasial Interaktif", layout="wide")
-st.title("🌍 Analisis Spasial Interaktif")
+st.title("🌍 Analisis Spasial Interaktif dengan Peta Interaktif")
 
 # =====================================================================
 # 1. Upload Shapefile Proyek
@@ -23,16 +23,12 @@ uploaded_file = st.file_uploader(
 gdf_proyek = None
 if uploaded_file:
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Simpan file zip sementara
         zip_path = os.path.join(tmpdir, "proyek.zip")
         with open(zip_path, "wb") as f:
             f.write(uploaded_file.read())
-        
-        # Ekstrak shapefile
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(tmpdir)
 
-        # Cari file .shp
         for file in os.listdir(tmpdir):
             if file.endswith(".shp"):
                 gdf_proyek = gpd.read_file(os.path.join(tmpdir, file))
@@ -47,7 +43,6 @@ REFERENSI_DIR = "referensi"
 if not os.path.exists(REFERENSI_DIR):
     os.makedirs(REFERENSI_DIR)
 
-# Upload shapefile referensi
 uploaded_ref = st.file_uploader(
     "Upload Shapefile Referensi (ZIP)", 
     type="zip", 
@@ -63,14 +58,8 @@ if uploaded_ref:
             zip_ref.extractall(REFERENSI_DIR)
     st.success("✅ Shapefile referensi berhasil disimpan!")
 
-# List semua shapefile referensi
 shp_files = [f for f in os.listdir(REFERENSI_DIR) if f.endswith(".shp")]
-
-selected_refs = st.multiselect(
-    "Pilih Shapefile Referensi",
-    shp_files,
-    default=shp_files[:1] if shp_files else None
-)
+selected_refs = st.multiselect("Pilih Shapefile Referensi", shp_files)
 
 gdf_refs = []
 for ref_file in selected_refs:
@@ -79,87 +68,47 @@ for ref_file in selected_refs:
         gdf_refs.append(gpd.read_file(ref_path))
 
 # =====================================================================
-# 3. Pilihan Zona UTM
-# =====================================================================
-st.subheader("📐 Pilih Proyeksi UTM untuk Analisis")
-
-col1, col2 = st.columns(2)
-with col1:
-    utm_zone = st.number_input("Zona UTM", min_value=1, max_value=60, value=48, step=1)
-with col2:
-    hemisphere = st.radio("Belahan Bumi", ["N", "S"], index=0)
-
-if hemisphere == "N":
-    epsg_code = 32600 + utm_zone
-else:
-    epsg_code = 32700 + utm_zone
-
-st.info(f"EPSG yang dipakai: **{epsg_code}**")
-
-# =====================================================================
-# 4. Pilih Basemap
+# 3. Pilihan Basemap
 # =====================================================================
 st.subheader("🗺️ Pilih Basemap")
 
 basemap_options = {
-    "ESRI Satelit": ctx.providers.Esri.WorldImagery,
-    "OpenStreetMap": ctx.providers.OpenStreetMap.Mapnik,
-    "Carto Positron": ctx.providers.CartoDB.Positron
+    "OpenStreetMap": "OpenStreetMap",
+    "ESRI Satelit": "Esri.WorldImagery",
+    "Carto Positron": "CartoDB.Positron"
 }
 basemap_choice = st.selectbox("Pilih Basemap", list(basemap_options.keys()))
 
 # =====================================================================
-# 5. Analisis Luasan & Peta
+# 4. Tampilkan Peta Interaktif
 # =====================================================================
 if gdf_proyek is not None:
-    st.subheader("📊 Hasil Luasan")
+    st.subheader("🗺️ Peta Interaktif")
 
-    # Luas proyek
-    luas_proyek = gdf_proyek.to_crs(epsg=epsg_code).area.sum()
-    st.write(f"**Luas Tapak Proyek (m²):** {luas_proyek:,.2f}")
-
-    # Luas overlay
-    if gdf_refs:
-        luas_overlay_total = 0
-        for gdf_ref in gdf_refs:
-            luas_overlay = gpd.overlay(
-                gdf_proyek.to_crs(epsg=epsg_code),
-                gdf_ref.to_crs(epsg=epsg_code),
-                how="intersection"
-            ).area.sum()
-            luas_overlay_total += luas_overlay
-
-        st.write(f"**Total Luas Overlay (m²):** {luas_overlay_total:,.2f}")
-    else:
-        st.info("Tidak ada shapefile referensi yang dipilih.")
-
-    # Peta overlay
-    st.subheader("🗺️ Peta Overlay")
-
-    fig, ax = plt.subplots(figsize=(10, 8))
-
-    # Plot referensi
-    for i, gdf_ref in enumerate(gdf_refs):
-        gdf_ref.to_crs(epsg=3857).plot(
-            ax=ax, 
-            facecolor="none", 
-            edgecolor="gray", 
-            linewidth=1, 
-            label=f"Referensi {i+1}"
-        )
-
-    # Plot proyek
-    gdf_proyek.to_crs(epsg=3857).plot(
-        ax=ax, 
-        facecolor="purple", 
-        alpha=0.5, 
-        edgecolor="black", 
-        label="Proyek"
+    # Gunakan centroid untuk zoom awal
+    centroid = gdf_proyek.to_crs(epsg=4326).geometry.centroid.iloc[0]
+    m = folium.Map(
+        location=[centroid.y, centroid.x],
+        zoom_start=12,
+        tiles=basemap_options[basemap_choice]
     )
 
-    # Tambah basemap
-    ctx.add_basemap(ax, source=basemap_options[basemap_choice], crs="EPSG:3857")
-    ax.legend()
-    ax.set_axis_off()
+    # Tambahkan proyek
+    folium.GeoJson(
+        gdf_proyek.to_crs(epsg=4326),
+        name="Proyek",
+        style_function=lambda x: {"fillColor": "purple", "color": "black", "weight": 2, "fillOpacity": 0.5},
+        tooltip=folium.GeoJsonTooltip(fields=gdf_proyek.columns.tolist())
+    ).add_to(m)
 
-    st.pyplot(fig)
+    # Tambahkan referensi
+    for i, gdf_ref in enumerate(gdf_refs):
+        folium.GeoJson(
+            gdf_ref.to_crs(epsg=4326),
+            name=f"Referensi {i+1}",
+            style_function=lambda x: {"fillColor": "none", "color": "gray", "weight": 1},
+            tooltip=folium.GeoJsonTooltip(fields=gdf_ref.columns.tolist())
+        ).add_to(m)
+
+    folium.LayerControl().add_to(m)
+    st_folium(m, width=900, height=600)
