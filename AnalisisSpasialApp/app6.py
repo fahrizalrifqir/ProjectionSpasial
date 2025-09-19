@@ -171,11 +171,11 @@ if uploaded_files:
 # ===============================
 # Shapefile Referensi
 # ===============================
-st.subheader("📂 Shapefile Referensi")
+st.subheader("📂 Shapefile Overlay")
 REFERENSI_DIR = "referensi"
 os.makedirs(REFERENSI_DIR, exist_ok=True)
 
-uploaded_ref = st.file_uploader("Upload Shapefile Referensi (ZIP)", type="zip", key="ref")
+uploaded_ref = st.file_uploader("Upload Shapefile Overlay (ZIP)", type="zip", key="ref")
 if uploaded_ref:
     with tempfile.TemporaryDirectory() as tmpdir:
         zip_path = os.path.join(tmpdir, "referensi.zip")
@@ -183,14 +183,14 @@ if uploaded_ref:
             f.write(uploaded_ref.read())
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(REFERENSI_DIR)
-    st.success("✅ Shapefile referensi berhasil disimpan!")
+    st.success("✅ Shapefile Overlay berhasil disimpan!")
 
 shp_files = [f for f in os.listdir(REFERENSI_DIR) if f.endswith(".shp")]
-selected_refs = st.multiselect("Pilih Shapefile Referensi", shp_files)
+selected_refs = st.multiselect("Pilih Shapefile Overlay", shp_files)
 
 # Fitur hapus shapefile referensi
 if shp_files:
-    file_to_delete = st.selectbox("🗑️ Hapus shapefile referensi?", ["-"] + shp_files)
+    file_to_delete = st.selectbox("🗑️ Hapus shapefile overlay?", ["-"] + shp_files)
     if file_to_delete != "-":
         if st.button("Hapus File"):
             basename = os.path.splitext(file_to_delete)[0]
@@ -199,10 +199,10 @@ if shp_files:
                     os.remove(os.path.join(REFERENSI_DIR, f))
             st.warning(f"❌ {file_to_delete} berhasil dihapus. Silakan refresh halaman.")
 
-    if st.button("🗑️ Hapus Semua Shapefile Referensi"):
+    if st.button("🗑️ Hapus Semua Shapefile Overlay"):
         for f in os.listdir(REFERENSI_DIR):
             os.remove(os.path.join(REFERENSI_DIR, f))
-        st.warning("❌ Semua shapefile referensi berhasil dihapus. Silakan refresh halaman.")
+        st.warning("❌ Semua shapefile overlay berhasil dihapus. Silakan refresh halaman.")
 
 # Load referensi terpilih
 gdf_refs = []
@@ -287,5 +287,6 @@ if all_gdfs:
 
     folium.LayerControl().add_to(m)
     st_folium(m, width=900, height=600)
+
 
 
