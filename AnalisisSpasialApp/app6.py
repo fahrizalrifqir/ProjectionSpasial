@@ -160,7 +160,7 @@ if uploaded_files:
             )
 
     if len(uploaded_files) > 1:
-        with st.expander("📦 Download Semua):
+        with st.expander("📦 Download Semua"):
             st.download_button(
                 label="⬇️ Download all_files.zip",
                 data=all_zip_buffer.getvalue(),
@@ -287,4 +287,5 @@ if all_gdfs:
 
     folium.LayerControl().add_to(m)
     st_folium(m, width=900, height=600)
+
 
