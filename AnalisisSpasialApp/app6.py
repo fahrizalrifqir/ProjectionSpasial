@@ -7,6 +7,8 @@ import zipfile
 import tempfile
 from io import BytesIO
 import pandas as pd
+import pdfplumber
+from shapely.geometry import Polygon
 
 st.set_page_config(page_title="Analisis Spasial Interaktif", layout="wide")
 st.title("🌍 Analisis Spasial Interaktif")
@@ -169,6 +171,37 @@ if uploaded_files:
             )
 
 # ===============================
+# Upload PDF KKPR
+# ===============================
+st.subheader("📑 Upload Dokumen PDF KKPR (opsional)")
+uploaded_pdf = st.file_uploader("Upload PDF KKPR (berisi koordinat)", type=["pdf"], key="pdf")
+
+if uploaded_pdf:
+    coords = []
+    with pdfplumber.open(uploaded_pdf) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text()
+            if text:
+                for line in text.splitlines():
+                    parts = line.strip().split()
+                    if len(parts) == 3 and parts[0].isdigit():
+                        try:
+                            x = float(parts[1])
+                            y = float(parts[2])
+                            coords.append((x, y))
+                        except:
+                            pass
+    if coords:
+        poly = Polygon(coords)
+        gdf_pdf = gpd.GeoDataFrame(
+            {"source_file": ["PDF_KKPR"]},
+            geometry=[poly],
+            crs="EPSG:4326"
+        )
+        all_gdfs.append(gdf_pdf)
+        st.success(f"✅ {len(coords)} koordinat berhasil dibaca dari PDF")
+
+# ===============================
 # Shapefile Referensi
 # ===============================
 st.subheader("📂 Shapefile Overlay")
@@ -241,7 +274,7 @@ if all_gdfs and gdf_refs:
 # ===============================
 if all_gdfs:
     gdf_proyek = gpd.GeoDataFrame(pd.concat(all_gdfs, ignore_index=True), crs=all_gdfs[0].crs)
-    bounds = gdf_proyek.to_crs(epsg=4326).total_bounds  # [minx, miny, maxx, maxy]
+    bounds = gdf_proyek.to_crs(epsg=4326).total_bounds
     center = [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2]
 
     st.subheader("🗺 Peta Interaktif")
@@ -282,7 +315,6 @@ if all_gdfs:
             style_function=lambda x: {"color": "gray", "fillOpacity": 0},
         ).add_to(m)
 
-    # Zoom ke extent proyek
     m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
 
     folium.LayerControl().add_to(m)
