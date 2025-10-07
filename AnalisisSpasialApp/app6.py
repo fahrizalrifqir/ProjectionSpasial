@@ -1,15 +1,12 @@
 import streamlit as st
 import pdfplumber
 import fitz  # PyMuPDF
-import pytesseract
 from PIL import Image
 import tempfile, os
-import docx  # python-docx
+import docx
 from rapidfuzz import fuzz
-import pytesseract
-
-# kasih tau Python lokasi file tesseract.exe
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+import easyocr
+import numpy as np
 
 # ===============================
 # Kriteria resmi per jenis dokumen
@@ -86,6 +83,11 @@ def fuzzy_match(text, keyword, threshold=80):
     return score >= threshold, score
 
 # ===============================
+# EasyOCR Reader
+# ===============================
+reader = easyocr.Reader(['id', 'en'], gpu=False)
+
+# ===============================
 # Analisis DOCX
 # ===============================
 def analyze_docx(input_docx, keywords):
@@ -97,10 +99,9 @@ def analyze_docx(input_docx, keywords):
             match, score = fuzzy_match(para.text, keyword)
             if match:
                 found[keyword].append(f"paragraf {i+1} (score {score})")
-                # highlight run
                 for run in para.runs:
                     if fuzz.partial_ratio(run.text.lower(), keyword.lower()) >= 80:
-                        run.font.highlight_color = 7  # wdYellow
+                        run.font.highlight_color = 7  # highlight kuning
 
     output_path = input_docx.replace(".docx", "_checked.docx")
     doc.save(output_path)
@@ -117,11 +118,14 @@ def analyze_pdf(input_pdf, keywords):
         for i, page in enumerate(pdf.pages):
             text = page.extract_text()
 
-            if not text:  # OCR jika kosong
+            if not text:  # OCR dengan EasyOCR
                 page_fitz = doc[i]
                 pix = page_fitz.get_pixmap()
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                text = pytesseract.image_to_string(img, lang="ind")
+                img_np = np.array(img)
+
+                results = reader.readtext(img_np, detail=0)
+                text = " ".join(results)
 
             for keyword in keywords:
                 match, score = fuzzy_match(text, keyword)
@@ -133,7 +137,7 @@ def analyze_pdf(input_pdf, keywords):
         for p in pages:
             page_num = int(p.split()[1])
             page = doc[page_num - 1]
-            for inst in page.search_for(keyword.split()[0]):  # cari kata pertama
+            for inst in page.search_for(keyword.split()[0]):
                 highlight = page.add_highlight_annot(inst)
                 highlight.update()
 
@@ -194,7 +198,6 @@ if uploaded_files:
                 else:
                     st.error(f"❌ {keyword} tidak ditemukan")
 
-            # Preview PDF
             st.subheader(f"👀 Preview hasil {uploaded_file.name}")
             doc = fitz.open(output_pdf)
             preview_pages = st.slider(f"Pilih halaman ({uploaded_file.name})", 1, len(doc), 1, key=uploaded_file.name)
@@ -210,13 +213,9 @@ if uploaded_files:
             os.remove(input_pdf)
             os.remove(output_pdf)
 
-    # ===============================
-    # Rekap keseluruhan
-    # ===============================
     st.markdown("## 📋 Rekap Kelengkapan Semua File")
     for keyword, lokasi in overall_found.items():
         if lokasi:
             st.success(f"✅ {keyword} ditemukan di {lokasi}")
         else:
             st.error(f"❌ {keyword} tidak ditemukan di dokumen manapun")
-
