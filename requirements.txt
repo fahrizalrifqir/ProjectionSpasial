@@ -6,3 +6,5 @@ python-docx
 rapidfuzz
 easyocr
 torch
+pandas
+openpyxl
