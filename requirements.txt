@@ -1,7 +1,8 @@
 streamlit
 pdfplumber
 pymupdf
-pytesseract
 Pillow
 python-docx
 rapidfuzz
+easyocr
+torch
