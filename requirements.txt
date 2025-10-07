@@ -1,10 +1,8 @@
 streamlit
 pdfplumber
 pymupdf
-Pillow
+pillow
 python-docx
 rapidfuzz
-easyocr
-torch
 pandas
 openpyxl
