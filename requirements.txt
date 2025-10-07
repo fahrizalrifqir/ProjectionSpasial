@@ -1,11 +1,6 @@
 streamlit
-streamlit-folium
-geopandas
-shapely
-fiona
-pyproj
-rtree
-matplotlib
-folium
-branca
-pandas
+pdfplumber
+pymupdf
+pytesseract
+pdf2image
+Pillow
