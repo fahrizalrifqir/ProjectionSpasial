@@ -85,7 +85,7 @@ def fuzzy_match(text, keyword, threshold=80):
     return score >= threshold, score
 
 # ===============================
-# EasyOCR Reader
+# EasyOCR Reader (load sekali)
 # ===============================
 reader = easyocr.Reader(['id', 'en'], gpu=False)
 
@@ -110,7 +110,7 @@ def analyze_docx(input_docx, keywords):
     return found, output_path
 
 # ===============================
-# Analisis PDF
+# Analisis PDF (optimisasi OCR cepat)
 # ===============================
 def analyze_pdf(input_pdf, keywords):
     found = {k: [] for k in keywords}
@@ -120,18 +120,25 @@ def analyze_pdf(input_pdf, keywords):
         for i, page in enumerate(pdf.pages):
             text = page.extract_text()
 
-            if not text:  # OCR dengan EasyOCR
+            if not text:  # OCR hanya kalau kosong
                 page_fitz = doc[i]
-                pix = page_fitz.get_pixmap()
+                pix = page_fitz.get_pixmap(matrix=fitz.Matrix(1, 1))  # resolusi rendah = cepat
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 img_np = np.array(img)
-                results = reader.readtext(img_np, detail=0)
-                text = " ".join(results)
 
-            for keyword in keywords:
-                match, score = fuzzy_match(text, keyword)
-                if match:
-                    found[keyword].append(f"halaman {i+1} (score {score})")
+                results = reader.readtext(img_np, detail=0)
+
+                for keyword in keywords:
+                    for r in results:
+                        match, score = fuzzy_match(r, keyword)
+                        if match:
+                            found[keyword].append(f"halaman {i+1} (OCR, score {score})")
+
+            else:
+                for keyword in keywords:
+                    match, score = fuzzy_match(text, keyword)
+                    if match:
+                        found[keyword].append(f"halaman {i+1} (score {score})")
 
     # Highlight PDF
     for keyword, pages in found.items():
