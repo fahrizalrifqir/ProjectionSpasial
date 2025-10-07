@@ -5,6 +5,7 @@ import pytesseract
 from PIL import Image
 import tempfile, os
 import docx  # python-docx
+from rapidfuzz import fuzz
 
 # ===============================
 # Kriteria resmi per jenis dokumen
@@ -74,7 +75,14 @@ CRITERIA = {
 }
 
 # ===============================
-# Helper untuk cek Word
+# Fuzzy matching
+# ===============================
+def fuzzy_match(text, keyword, threshold=80):
+    score = fuzz.partial_ratio(keyword.lower(), text.lower())
+    return score >= threshold, score
+
+# ===============================
+# Analisis DOCX
 # ===============================
 def analyze_docx(input_docx, keywords):
     doc = docx.Document(input_docx)
@@ -82,11 +90,12 @@ def analyze_docx(input_docx, keywords):
 
     for i, para in enumerate(doc.paragraphs):
         for keyword in keywords:
-            if keyword.lower() in para.text.lower():
-                found[keyword].append(f"paragraf {i+1}")
-                # highlight teks
+            match, score = fuzzy_match(para.text, keyword)
+            if match:
+                found[keyword].append(f"paragraf {i+1} (score {score})")
+                # highlight run
                 for run in para.runs:
-                    if keyword.lower() in run.text.lower():
+                    if fuzz.partial_ratio(run.text.lower(), keyword.lower()) >= 80:
                         run.font.highlight_color = 7  # wdYellow
 
     output_path = input_docx.replace(".docx", "_checked.docx")
@@ -94,7 +103,7 @@ def analyze_docx(input_docx, keywords):
     return found, output_path
 
 # ===============================
-# Helper untuk cek PDF
+# Analisis PDF
 # ===============================
 def analyze_pdf(input_pdf, keywords):
     found = {k: [] for k in keywords}
@@ -104,23 +113,23 @@ def analyze_pdf(input_pdf, keywords):
         for i, page in enumerate(pdf.pages):
             text = page.extract_text()
 
-            # OCR dengan PyMuPDF jika halaman kosong
-            if not text:
+            if not text:  # OCR jika kosong
                 page_fitz = doc[i]
                 pix = page_fitz.get_pixmap()
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 text = pytesseract.image_to_string(img, lang="ind")
 
             for keyword in keywords:
-                if keyword.lower() in text.lower():
-                    found[keyword].append(f"halaman {i+1}")
+                match, score = fuzzy_match(text, keyword)
+                if match:
+                    found[keyword].append(f"halaman {i+1} (score {score})")
 
-    # Highlight hasil
+    # Highlight PDF
     for keyword, pages in found.items():
         for p in pages:
             page_num = int(p.split()[1])
             page = doc[page_num - 1]
-            for inst in page.search_for(keyword):
+            for inst in page.search_for(keyword.split()[0]):  # cari kata pertama
                 highlight = page.add_highlight_annot(inst)
                 highlight.update()
 
