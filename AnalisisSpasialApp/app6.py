@@ -6,6 +6,10 @@ from PIL import Image
 import tempfile, os
 import docx  # python-docx
 from rapidfuzz import fuzz
+import pytesseract
+
+# kasih tau Python lokasi file tesseract.exe
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 # ===============================
 # Kriteria resmi per jenis dokumen
@@ -215,3 +219,4 @@ if uploaded_files:
             st.success(f"✅ {keyword} ditemukan di {lokasi}")
         else:
             st.error(f"❌ {keyword} tidak ditemukan di dokumen manapun")
+
