@@ -5,10 +5,8 @@ from PIL import Image
 import tempfile, os, io
 import docx
 from rapidfuzz import fuzz
-import numpy as np
 import pandas as pd
 from openpyxl import Workbook
-from paddleocr import PaddleOCR
 
 # ===============================
 # Kriteria resmi per jenis dokumen
@@ -81,15 +79,9 @@ CRITERIA = {
 # Fuzzy matching
 # ===============================
 def fuzzy_match(text, keyword, threshold=80):
+    from rapidfuzz import fuzz
     score = fuzz.partial_ratio(keyword.lower(), text.lower())
     return score >= threshold, score
-
-# ===============================
-# PaddleOCR Reader (lebih ringan)
-# ===============================
-@st.cache_resource
-def load_reader():
-    return PaddleOCR(use_angle_cls=True, lang='en')  # ID belum ada, pakai EN
 
 # ===============================
 # Analisis DOCX
@@ -112,38 +104,20 @@ def analyze_docx(input_docx, keywords):
     return found, output_path
 
 # ===============================
-# Analisis PDF (OCR optional + progress bar)
+# Analisis PDF (tanpa OCR → aman Cloud)
 # ===============================
-def analyze_pdf(input_pdf, keywords, use_ocr=True):
+def analyze_pdf(input_pdf, keywords):
     found = {k: [] for k in keywords}
     doc = fitz.open(input_pdf)
 
     with pdfplumber.open(input_pdf) as pdf:
         progress = st.progress(0)
         for i, page in enumerate(pdf.pages):
-            text = page.extract_text()
-
-            if not text and use_ocr:  # OCR hanya kalau kosong
-                reader = load_reader()
-                page_fitz = doc[i]
-                pix = page_fitz.get_pixmap(matrix=fitz.Matrix(1, 1))
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                img_np = np.array(img)
-
-                results = reader.ocr(img_np)
-                for keyword in keywords:
-                    for line in results[0]:
-                        txt = line[1][0]
-                        match, score = fuzzy_match(txt, keyword)
-                        if match:
-                            found[keyword].append(f"halaman {i+1} (OCR, score {score})")
-
-            elif text:
-                for keyword in keywords:
-                    match, score = fuzzy_match(text, keyword)
-                    if match:
-                        found[keyword].append(f"halaman {i+1} (score {score})")
-
+            text = page.extract_text() or ""  # hanya teks
+            for keyword in keywords:
+                match, score = fuzzy_match(text, keyword)
+                if match:
+                    found[keyword].append(f"halaman {i+1} (score {score})")
             progress.progress((i+1)/len(pdf.pages))
 
     # Highlight PDF
@@ -167,7 +141,6 @@ st.set_page_config(page_title="Cek Kelengkapan Dokumen", layout="wide")
 st.title("📑 Cek Kelengkapan Dokumen Lingkungan Hidup")
 
 jenis = st.selectbox("Pilih jenis dokumen", list(CRITERIA.keys()))
-use_ocr = st.checkbox("Gunakan OCR untuk halaman gambar", value=False)  # default off
 uploaded_files = st.file_uploader("Upload satu atau lebih file (PDF/DOCX)", type=["pdf","docx"], accept_multiple_files=True)
 
 if uploaded_files:
@@ -203,7 +176,7 @@ if uploaded_files:
                 tmp_input.write(uploaded_file.read())
                 input_pdf = tmp_input.name
 
-            found_pages, output_pdf = analyze_pdf(input_pdf, KEYWORDS, use_ocr=use_ocr)
+            found_pages, output_pdf = analyze_pdf(input_pdf, KEYWORDS)
             for k, v in found_pages.items():
                 overall_found[k].extend(v)
 
