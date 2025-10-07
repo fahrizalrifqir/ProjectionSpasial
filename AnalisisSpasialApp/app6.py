@@ -1,7 +1,7 @@
 import streamlit as st
 import pdfplumber
 import fitz  # PyMuPDF
-import tempfile, os, io
+import tempfile, os, io, re
 import docx
 import pandas as pd
 from openpyxl import Workbook
@@ -75,13 +75,20 @@ CRITERIA = {
 }
 
 # ===============================
-# Matching kata lebih ketat
+# Matching kata utuh (lebih presisi)
 # ===============================
 def keyword_match(text, keyword, min_ratio=0.5):
+    """
+    Mencocokkan keyword hanya berdasarkan kata utuh, bukan substring.
+    Contoh: 'saran masukan dan tanggapan' tidak cocok untuk 'sarana'.
+    """
     words = keyword.lower().split()
     text_lower = text.lower()
-    matches = sum(1 for w in words if w in text_lower)
-    return matches / len(words) >= min_ratio
+    matches = 0
+    for w in words:
+        if re.search(rf"\b{re.escape(w)}\b", text_lower):
+            matches += 1
+    return matches / len(words) >= min_ratio, matches
 
 # ===============================
 # Analisis DOCX
@@ -92,7 +99,8 @@ def analyze_docx(input_docx, keywords):
 
     for i, para in enumerate(doc.paragraphs):
         for keyword in keywords:
-            if keyword_match(para.text, keyword):
+            matched, _ = keyword_match(para.text, keyword)
+            if matched:
                 found[keyword].append(f"paragraf {i+1}")
 
     output_path = input_docx.replace(".docx", "_checked.docx")
@@ -100,25 +108,32 @@ def analyze_docx(input_docx, keywords):
     return found, output_path
 
 # ===============================
-# Analisis PDF (hanya teks)
+# Analisis PDF (dengan batas 3 halaman teratas)
 # ===============================
 def analyze_pdf(input_pdf, keywords):
     found = {k: [] for k in keywords}
     doc = fitz.open(input_pdf)
+    match_scores = {k: {} for k in keywords}
 
     with pdfplumber.open(input_pdf) as pdf:
         for i, page in enumerate(pdf.pages):
             text = page.extract_text() or ""
             for keyword in keywords:
-                if keyword_match(text, keyword):
-                    found[keyword].append(f"halaman {i+1}")
+                matched, score = keyword_match(text, keyword)
+                if score > 0:
+                    match_scores[keyword][i+1] = score
 
-    # tetap buat PDF hasil dengan highlight (hanya kata pertama)
+    # Ambil 3 halaman teratas per keyword
+    for keyword, page_scores in match_scores.items():
+        top_pages = sorted(page_scores.items(), key=lambda x: x[1], reverse=True)[:3]
+        found[keyword] = [f"halaman {p[0]}" for p in top_pages]
+
+    # Highlight kata pertama di halaman-halaman tersebut
     for keyword, pages in found.items():
+        first_word = keyword.split()[0]
         for p in pages:
             page_num = int(p.split()[1])
             page = doc[page_num - 1]
-            first_word = keyword.split()[0]
             for inst in page.search_for(first_word):
                 highlight = page.add_highlight_annot(inst)
                 highlight.update()
@@ -177,7 +192,7 @@ if uploaded_files:
             os.remove(output_pdf)
 
     # ===============================
-    # Rekap
+    # Rekap hasil
     # ===============================
     st.markdown("## 📋 Rekap")
     data = []
@@ -186,7 +201,7 @@ if uploaded_files:
     df = pd.DataFrame(data, columns=["Kriteria", "Status", "Lokasi"])
     st.dataframe(df)
 
-    # download Excel
+    # Download Excel hasil rekap
     output = io.BytesIO()
     wb = Workbook()
     ws = wb.active
