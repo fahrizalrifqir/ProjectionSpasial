@@ -85,9 +85,11 @@ def fuzzy_match(text, keyword, threshold=80):
     return score >= threshold, score
 
 # ===============================
-# EasyOCR Reader (load sekali)
+# EasyOCR Reader (load sekali, kalau dipakai)
 # ===============================
-reader = easyocr.Reader(['id', 'en'], gpu=False)
+@st.cache_resource
+def load_reader():
+    return easyocr.Reader(['id', 'en'], gpu=False)
 
 # ===============================
 # Analisis DOCX
@@ -110,19 +112,22 @@ def analyze_docx(input_docx, keywords):
     return found, output_path
 
 # ===============================
-# Analisis PDF (optimisasi OCR cepat)
+# Analisis PDF (OCR optional + progress bar)
 # ===============================
-def analyze_pdf(input_pdf, keywords):
+def analyze_pdf(input_pdf, keywords, use_ocr=True):
     found = {k: [] for k in keywords}
     doc = fitz.open(input_pdf)
 
     with pdfplumber.open(input_pdf) as pdf:
+        progress = st.progress(0)
         for i, page in enumerate(pdf.pages):
             text = page.extract_text()
 
-            if not text:  # OCR hanya kalau kosong
+            # OCR hanya jika kosong & user aktifkan OCR
+            if not text and use_ocr:
+                reader = load_reader()
                 page_fitz = doc[i]
-                pix = page_fitz.get_pixmap(matrix=fitz.Matrix(1, 1))  # resolusi rendah = cepat
+                pix = page_fitz.get_pixmap(matrix=fitz.Matrix(1, 1))
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 img_np = np.array(img)
 
@@ -134,11 +139,13 @@ def analyze_pdf(input_pdf, keywords):
                         if match:
                             found[keyword].append(f"halaman {i+1} (OCR, score {score})")
 
-            else:
+            elif text:
                 for keyword in keywords:
                     match, score = fuzzy_match(text, keyword)
                     if match:
                         found[keyword].append(f"halaman {i+1} (score {score})")
+
+            progress.progress((i+1)/len(pdf.pages))
 
     # Highlight PDF
     for keyword, pages in found.items():
@@ -161,6 +168,7 @@ st.set_page_config(page_title="Cek Kelengkapan Dokumen", layout="wide")
 st.title("📑 Cek Kelengkapan Dokumen Lingkungan Hidup")
 
 jenis = st.selectbox("Pilih jenis dokumen", list(CRITERIA.keys()))
+use_ocr = st.checkbox("Gunakan OCR untuk halaman gambar", value=False)  # default off
 uploaded_files = st.file_uploader("Upload satu atau lebih file (PDF/DOCX)", type=["pdf","docx"], accept_multiple_files=True)
 
 if uploaded_files:
@@ -196,7 +204,7 @@ if uploaded_files:
                 tmp_input.write(uploaded_file.read())
                 input_pdf = tmp_input.name
 
-            found_pages, output_pdf = analyze_pdf(input_pdf, KEYWORDS)
+            found_pages, output_pdf = analyze_pdf(input_pdf, KEYWORDS, use_ocr=use_ocr)
             for k, v in found_pages.items():
                 overall_found[k].extend(v)
 
