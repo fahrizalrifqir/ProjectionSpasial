@@ -2,11 +2,9 @@ import streamlit as st
 import pdfplumber
 import fitz  # PyMuPDF
 import pytesseract
-from pdf2image import convert_from_path
-import tempfile, os
 from PIL import Image
+import tempfile, os
 import docx  # python-docx
-from docx.shared import RGBColor
 
 # ===============================
 # Kriteria resmi per jenis dokumen
@@ -86,13 +84,49 @@ def analyze_docx(input_docx, keywords):
         for keyword in keywords:
             if keyword.lower() in para.text.lower():
                 found[keyword].append(f"paragraf {i+1}")
-                # beri highlight warna kuning
+                # highlight teks
                 for run in para.runs:
                     if keyword.lower() in run.text.lower():
                         run.font.highlight_color = 7  # wdYellow
 
     output_path = input_docx.replace(".docx", "_checked.docx")
     doc.save(output_path)
+    return found, output_path
+
+# ===============================
+# Helper untuk cek PDF
+# ===============================
+def analyze_pdf(input_pdf, keywords):
+    found = {k: [] for k in keywords}
+    doc = fitz.open(input_pdf)
+
+    with pdfplumber.open(input_pdf) as pdf:
+        for i, page in enumerate(pdf.pages):
+            text = page.extract_text()
+
+            # OCR dengan PyMuPDF jika halaman kosong
+            if not text:
+                page_fitz = doc[i]
+                pix = page_fitz.get_pixmap()
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                text = pytesseract.image_to_string(img, lang="ind")
+
+            for keyword in keywords:
+                if keyword.lower() in text.lower():
+                    found[keyword].append(f"halaman {i+1}")
+
+    # Highlight hasil
+    for keyword, pages in found.items():
+        for p in pages:
+            page_num = int(p.split()[1])
+            page = doc[page_num - 1]
+            for inst in page.search_for(keyword):
+                highlight = page.add_highlight_annot(inst)
+                highlight.update()
+
+    output_path = input_pdf.replace(".pdf", "_checked.pdf")
+    doc.save(output_path)
+    doc.close()
     return found, output_path
 
 # ===============================
@@ -111,16 +145,12 @@ if uploaded_files:
     for uploaded_file in uploaded_files:
         st.markdown(f"### 🔍 Mengecek file: **{uploaded_file.name}**")
 
-        # ====================
-        # Word
-        # ====================
         if uploaded_file.name.lower().endswith(".docx"):
             with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_input:
                 tmp_input.write(uploaded_file.read())
                 input_docx = tmp_input.name
 
             found_pages, output_docx = analyze_docx(input_docx, KEYWORDS)
-
             for k, v in found_pages.items():
                 overall_found[k].extend(v)
 
@@ -136,38 +166,12 @@ if uploaded_files:
             os.remove(input_docx)
             os.remove(output_docx)
 
-        # ====================
-        # PDF
-        # ====================
         elif uploaded_file.name.lower().endswith(".pdf"):
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_input:
                 tmp_input.write(uploaded_file.read())
                 input_pdf = tmp_input.name
 
-            output_pdf = input_pdf.replace(".pdf", "_checked.pdf")
-            found_pages = {k: [] for k in KEYWORDS}
-
-            with pdfplumber.open(input_pdf) as pdf:
-                for i, page in enumerate(pdf.pages):
-                    text = page.extract_text()
-                    if not text:  # OCR jika halaman berupa gambar
-                        images = convert_from_path(input_pdf, first_page=i+1, last_page=i+1)
-                        text = pytesseract.image_to_string(images[0], lang="ind")
-                    for keyword in KEYWORDS:
-                        if keyword.lower() in text.lower():
-                            found_pages[keyword].append(f"halaman {i+1}")
-
-            # Highlight di PDF
-            doc = fitz.open(input_pdf)
-            for keyword, pages in found_pages.items():
-                for page_num in [int(p.split()[1]) for p in pages]:
-                    page = doc[page_num - 1]
-                    text_instances = page.search_for(keyword)
-                    for inst in text_instances:
-                        highlight = page.add_highlight_annot(inst)
-                        highlight.update()
-            doc.save(output_pdf)
-
+            found_pages, output_pdf = analyze_pdf(input_pdf, KEYWORDS)
             for k, v in found_pages.items():
                 overall_found[k].extend(v)
 
@@ -179,16 +183,17 @@ if uploaded_files:
 
             # Preview PDF
             st.subheader(f"👀 Preview hasil {uploaded_file.name}")
+            doc = fitz.open(output_pdf)
             preview_pages = st.slider(f"Pilih halaman ({uploaded_file.name})", 1, len(doc), 1, key=uploaded_file.name)
             page = doc[preview_pages - 1]
             pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
             st.image(img, caption=f"{uploaded_file.name} - halaman {preview_pages}", use_container_width=True)
+            doc.close()
 
             with open(output_pdf, "rb") as f:
                 st.download_button(f"⬇️ Download hasil cek ({uploaded_file.name})", f, file_name=f"{uploaded_file.name.replace('.pdf','_cek.pdf')}")
 
-            doc.close()
             os.remove(input_pdf)
             os.remove(output_pdf)
 
