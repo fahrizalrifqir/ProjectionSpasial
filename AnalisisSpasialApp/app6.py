@@ -5,10 +5,10 @@ from PIL import Image
 import tempfile, os, io
 import docx
 from rapidfuzz import fuzz
-import easyocr
 import numpy as np
 import pandas as pd
 from openpyxl import Workbook
+from paddleocr import PaddleOCR
 
 # ===============================
 # Kriteria resmi per jenis dokumen
@@ -85,11 +85,11 @@ def fuzzy_match(text, keyword, threshold=80):
     return score >= threshold, score
 
 # ===============================
-# EasyOCR Reader (load sekali, kalau dipakai)
+# PaddleOCR Reader (lebih ringan)
 # ===============================
 @st.cache_resource
 def load_reader():
-    return easyocr.Reader(['id', 'en'], gpu=False)
+    return PaddleOCR(use_angle_cls=True, lang='en')  # ID belum ada, pakai EN
 
 # ===============================
 # Analisis DOCX
@@ -123,19 +123,18 @@ def analyze_pdf(input_pdf, keywords, use_ocr=True):
         for i, page in enumerate(pdf.pages):
             text = page.extract_text()
 
-            # OCR hanya jika kosong & user aktifkan OCR
-            if not text and use_ocr:
+            if not text and use_ocr:  # OCR hanya kalau kosong
                 reader = load_reader()
                 page_fitz = doc[i]
                 pix = page_fitz.get_pixmap(matrix=fitz.Matrix(1, 1))
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 img_np = np.array(img)
 
-                results = reader.readtext(img_np, detail=0)
-
+                results = reader.ocr(img_np)
                 for keyword in keywords:
-                    for r in results:
-                        match, score = fuzzy_match(r, keyword)
+                    for line in results[0]:
+                        txt = line[1][0]
+                        match, score = fuzzy_match(txt, keyword)
                         if match:
                             found[keyword].append(f"halaman {i+1} (OCR, score {score})")
 
