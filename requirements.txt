@@ -2,6 +2,5 @@ streamlit
 pdfplumber
 pymupdf
 pytesseract
-pdf2image
 Pillow
 python-docx
