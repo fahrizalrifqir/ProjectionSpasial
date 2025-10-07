@@ -76,7 +76,7 @@ CRITERIA = {
 }
 
 # ===============================
-# Helper untuk cek di Word
+# Helper untuk cek Word
 # ===============================
 def analyze_docx(input_docx, keywords):
     doc = docx.Document(input_docx)
@@ -85,10 +85,11 @@ def analyze_docx(input_docx, keywords):
     for i, para in enumerate(doc.paragraphs):
         for keyword in keywords:
             if keyword.lower() in para.text.lower():
-                found[keyword].append(i+1)  # simpan nomor paragraf
-                # highlight teks
-                run = para.add_run(" [FOUND]")
-                run.font.color.rgb = RGBColor(255, 0, 0)
+                found[keyword].append(f"paragraf {i+1}")
+                # beri highlight warna kuning
+                for run in para.runs:
+                    if keyword.lower() in run.text.lower():
+                        run.font.highlight_color = 7  # wdYellow
 
     output_path = input_docx.replace(".docx", "_checked.docx")
     doc.save(output_path)
@@ -101,84 +102,102 @@ st.set_page_config(page_title="Cek Kelengkapan Dokumen", layout="wide")
 st.title("📑 Cek Kelengkapan Dokumen Lingkungan Hidup")
 
 jenis = st.selectbox("Pilih jenis dokumen", list(CRITERIA.keys()))
-uploaded_file = st.file_uploader("Upload file PDF atau Word", type=["pdf","docx"])
+uploaded_files = st.file_uploader("Upload satu atau lebih file (PDF/DOCX)", type=["pdf","docx"], accept_multiple_files=True)
 
-if uploaded_file:
+if uploaded_files:
     KEYWORDS = CRITERIA[jenis]
+    overall_found = {k: [] for k in KEYWORDS}
 
-    # ====================
-    # Jika file Word (DOCX)
-    # ====================
-    if uploaded_file.name.lower().endswith(".docx"):
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_input:
-            tmp_input.write(uploaded_file.read())
-            input_docx = tmp_input.name
+    for uploaded_file in uploaded_files:
+        st.markdown(f"### 🔍 Mengecek file: **{uploaded_file.name}**")
 
-        found_pages, output_docx = analyze_docx(input_docx, KEYWORDS)
+        # ====================
+        # Word
+        # ====================
+        if uploaded_file.name.lower().endswith(".docx"):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_input:
+                tmp_input.write(uploaded_file.read())
+                input_docx = tmp_input.name
 
-        st.subheader("📊 Hasil Pengecekan (Word)")
-        for keyword, paras in found_pages.items():
-            if paras:
-                st.success(f"✅ {keyword} ditemukan di paragraf {paras}")
-            else:
-                st.error(f"❌ {keyword} tidak ditemukan")
+            found_pages, output_docx = analyze_docx(input_docx, KEYWORDS)
 
-        with open(output_docx, "rb") as f:
-            st.download_button("⬇️ Download Word hasil cek", f, file_name="dokumen_cek.docx")
+            for k, v in found_pages.items():
+                overall_found[k].extend(v)
 
-        os.remove(input_docx)
-        os.remove(output_docx)
+            for keyword, paras in found_pages.items():
+                if paras:
+                    st.success(f"✅ {keyword} ditemukan di {paras}")
+                else:
+                    st.error(f"❌ {keyword} tidak ditemukan")
 
-    # ====================
-    # Jika file PDF
-    # ====================
-    elif uploaded_file.name.lower().endswith(".pdf"):
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_input:
-            tmp_input.write(uploaded_file.read())
-            input_pdf = tmp_input.name
+            with open(output_docx, "rb") as f:
+                st.download_button(f"⬇️ Download hasil cek ({uploaded_file.name})", f, file_name=f"{uploaded_file.name.replace('.docx','_cek.docx')}")
 
-        output_pdf = input_pdf.replace(".pdf", "_checked.pdf")
-        found_pages = {k: [] for k in KEYWORDS}
+            os.remove(input_docx)
+            os.remove(output_docx)
 
-        with pdfplumber.open(input_pdf) as pdf:
-            for i, page in enumerate(pdf.pages):
-                text = page.extract_text()
-                if not text:  # OCR jika halaman berupa gambar
-                    images = convert_from_path(input_pdf, first_page=i+1, last_page=i+1)
-                    text = pytesseract.image_to_string(images[0], lang="ind")
-                for keyword in KEYWORDS:
-                    if keyword.lower() in text.lower():
-                        found_pages[keyword].append(i+1)
+        # ====================
+        # PDF
+        # ====================
+        elif uploaded_file.name.lower().endswith(".pdf"):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_input:
+                tmp_input.write(uploaded_file.read())
+                input_pdf = tmp_input.name
 
-        # Highlight hasil di PDF
-        doc = fitz.open(input_pdf)
-        for keyword, pages in found_pages.items():
-            for page_num in pages:
-                page = doc[page_num - 1]
-                text_instances = page.search_for(keyword)
-                for inst in text_instances:
-                    highlight = page.add_highlight_annot(inst)
-                    highlight.update()
-        doc.save(output_pdf)
+            output_pdf = input_pdf.replace(".pdf", "_checked.pdf")
+            found_pages = {k: [] for k in KEYWORDS}
 
-        st.subheader("📊 Hasil Pengecekan (PDF)")
-        for keyword, pages in found_pages.items():
-            if pages:
-                st.success(f"✅ {keyword} ditemukan di halaman {pages}")
-            else:
-                st.error(f"❌ {keyword} tidak ditemukan")
+            with pdfplumber.open(input_pdf) as pdf:
+                for i, page in enumerate(pdf.pages):
+                    text = page.extract_text()
+                    if not text:  # OCR jika halaman berupa gambar
+                        images = convert_from_path(input_pdf, first_page=i+1, last_page=i+1)
+                        text = pytesseract.image_to_string(images[0], lang="ind")
+                    for keyword in KEYWORDS:
+                        if keyword.lower() in text.lower():
+                            found_pages[keyword].append(f"halaman {i+1}")
 
-        # Preview halaman PDF hasil
-        st.subheader("👀 Preview PDF hasil cek")
-        preview_pages = st.slider("Pilih halaman", 1, len(doc), 1)
-        page = doc[preview_pages - 1]
-        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        st.image(img, caption=f"Halaman {preview_pages}", use_container_width=True)
+            # Highlight di PDF
+            doc = fitz.open(input_pdf)
+            for keyword, pages in found_pages.items():
+                for page_num in [int(p.split()[1]) for p in pages]:
+                    page = doc[page_num - 1]
+                    text_instances = page.search_for(keyword)
+                    for inst in text_instances:
+                        highlight = page.add_highlight_annot(inst)
+                        highlight.update()
+            doc.save(output_pdf)
 
-        with open(output_pdf, "rb") as f:
-            st.download_button("⬇️ Download PDF hasil cek", f, file_name="dokumen_cek.pdf")
+            for k, v in found_pages.items():
+                overall_found[k].extend(v)
 
-        doc.close()
-        os.remove(input_pdf)
-        os.remove(output_pdf)
+            for keyword, pages in found_pages.items():
+                if pages:
+                    st.success(f"✅ {keyword} ditemukan di {pages}")
+                else:
+                    st.error(f"❌ {keyword} tidak ditemukan")
+
+            # Preview PDF
+            st.subheader(f"👀 Preview hasil {uploaded_file.name}")
+            preview_pages = st.slider(f"Pilih halaman ({uploaded_file.name})", 1, len(doc), 1, key=uploaded_file.name)
+            page = doc[preview_pages - 1]
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            st.image(img, caption=f"{uploaded_file.name} - halaman {preview_pages}", use_container_width=True)
+
+            with open(output_pdf, "rb") as f:
+                st.download_button(f"⬇️ Download hasil cek ({uploaded_file.name})", f, file_name=f"{uploaded_file.name.replace('.pdf','_cek.pdf')}")
+
+            doc.close()
+            os.remove(input_pdf)
+            os.remove(output_pdf)
+
+    # ===============================
+    # Rekap keseluruhan
+    # ===============================
+    st.markdown("## 📋 Rekap Kelengkapan Semua File")
+    for keyword, lokasi in overall_found.items():
+        if lokasi:
+            st.success(f"✅ {keyword} ditemukan di {lokasi}")
+        else:
+            st.error(f"❌ {keyword} tidak ditemukan di dokumen manapun")
