@@ -2,11 +2,13 @@ import streamlit as st
 import pdfplumber
 import fitz  # PyMuPDF
 from PIL import Image
-import tempfile, os
+import tempfile, os, io
 import docx
 from rapidfuzz import fuzz
 import easyocr
 import numpy as np
+import pandas as pd
+from openpyxl import Workbook
 
 # ===============================
 # Kriteria resmi per jenis dokumen
@@ -123,7 +125,6 @@ def analyze_pdf(input_pdf, keywords):
                 pix = page_fitz.get_pixmap()
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 img_np = np.array(img)
-
                 results = reader.readtext(img_np, detail=0)
                 text = " ".join(results)
 
@@ -213,9 +214,29 @@ if uploaded_files:
             os.remove(input_pdf)
             os.remove(output_pdf)
 
-    st.markdown("## 📋 Rekap Kelengkapan Semua File")
+    # ===============================
+    # Rekap Tabel Checklist
+    # ===============================
+    st.markdown("## 📋 Rekap Kelengkapan Semua File (Tabel Checklist)")
+
+    rekap_data = []
     for keyword, lokasi in overall_found.items():
         if lokasi:
-            st.success(f"✅ {keyword} ditemukan di {lokasi}")
+            rekap_data.append([keyword, "✅ Ada", ", ".join(lokasi)])
         else:
-            st.error(f"❌ {keyword} tidak ditemukan di dokumen manapun")
+            rekap_data.append([keyword, "❌ Tidak ada", "-"])
+
+    df_rekap = pd.DataFrame(rekap_data, columns=["Kriteria", "Status", "Lokasi"])
+    st.dataframe(df_rekap, use_container_width=True)
+
+    # download Excel
+    output = io.BytesIO()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Rekap Kelengkapan"
+    ws.append(["Kriteria", "Status", "Lokasi"])
+    for row in rekap_data:
+        ws.append(row)
+    wb.save(output)
+
+    st.download_button("⬇️ Download Rekap (Excel)", data=output.getvalue(), file_name="rekap_kelengkapan.xlsx")
