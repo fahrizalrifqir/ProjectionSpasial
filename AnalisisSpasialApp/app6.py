@@ -18,11 +18,11 @@ import xyzservices.providers as xyz
 # ======================
 st.set_page_config(page_title="PKKPR → SHP & Overlay (Koreksi Proyeksi)", layout="wide")
 st.title("PKKPR → Shapefile Converter & Overlay Tapak Proyek")
-st.error("⚠️ **Koreksi Aktif:** Skrip ini mengasumsikan koordinat Anda menggunakan **UTM WGS 84 Zona 53S (EPSG:32753)** DAN memiliki urutan **X/Y (Easting/Northing) yang terbalik** dalam dokumen (Lintang dokumen = X, Bujur dokumen = Y).")
+st.error("⚠️ **Koreksi Aktif:** Skrip ini mengasumsikan koordinat Anda menggunakan **UTM WGS 84 Zona 53N (EPSG:32653)** DAN memiliki urutan **X/Y (Easting/Northing) yang terbalik** dalam dokumen (Lintang dokumen = X, Bujur dokumen = Y).")
 
 # --- KONFIGURASI KRITIS ---
-# 1. Proyeksi yang paling sering benar untuk Halmahera Timur
-UTM_CRS_INPUT = "EPSG:32753"  # WGS 84 / UTM Zone 53S
+# 1. Proyeksi yang paling sering benar untuk Halmahera Timur (Utara Khatulistiwa)
+UTM_CRS_INPUT = "EPSG:32653"  # WGS 84 / UTM Zone 53N <--- PERBAIKAN DI SINI
 # 2. Bendera untuk membalik urutan pembacaan kolom (X, Y)
 SWAP_COORDINATES = True 
 # -------------------------
@@ -163,7 +163,7 @@ if uploaded_pkkpr:
             if coords_mentah_xy[0] != coords_mentah_xy[-1]:
                 coords_mentah_xy.append(coords_mentah_xy[0])
 
-            # Buat GeoDataFrame Titik dengan CRS UTM (EPSG:32753)
+            # Buat GeoDataFrame Titik dengan CRS UTM (EPSG:32653)
             gdf_points_utm = gpd.GeoDataFrame(
                 pd.DataFrame(coords_mentah_xy, columns=["Easting", "Northing"]),
                 geometry=[Point(xy) for xy in coords_mentah_xy],
@@ -216,7 +216,7 @@ if gdf_polygon is not None:
     
     st.info(f"""
     **Analisis Proyeksi Awal:**
-    - Proyeksi Input yang Digunakan: **{UTM_CRS_INPUT} (UTM 53S)** dengan urutan koordinat dibalik.
+    - Proyeksi Input yang Digunakan: **{UTM_CRS_INPUT} (UTM 53N)** dengan urutan koordinat dibalik.
     
     **Analisis Luas:**
     - Luas PKKPR (dokumen): **{luas_doc_str}**
