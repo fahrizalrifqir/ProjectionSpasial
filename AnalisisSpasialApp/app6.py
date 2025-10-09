@@ -18,12 +18,10 @@ import xyzservices.providers as xyz
 # ======================
 st.set_page_config(page_title="PKKPR → SHP & Overlay (Koreksi Proyeksi)", layout="wide")
 st.title("PKKPR → Shapefile Converter & Overlay Tapak Proyek")
-st.error("⚠️ **Koreksi Aktif:** Skrip ini mengasumsikan koordinat Anda menggunakan **UTM WGS 84 Zona 53N (EPSG:32653)** DAN memiliki urutan **X/Y (Easting/Northing) yang terbalik** dalam dokumen (Lintang dokumen = X, Bujur dokumen = Y).")
+st.error("⚠️ **Koreksi Aktif:** Menggunakan **UTM WGS 84 Zona 53N (EPSG:32653)** dan urutan koordinat dibalik (Lintang dokumen = X, Bujur dokumen = Y).")
 
 # --- KONFIGURASI KRITIS ---
-# 1. Proyeksi yang paling sering benar untuk Halmahera Timur (Utara Khatulistiwa)
-UTM_CRS_INPUT = "EPSG:32653"  # WGS 84 / UTM Zone 53N <--- PERBAIKAN DI SINI
-# 2. Bendera untuk membalik urutan pembacaan kolom (X, Y)
+UTM_CRS_INPUT = "EPSG:32653"  # WGS 84 / UTM Zone 53N
 SWAP_COORDINATES = True 
 # -------------------------
 
@@ -47,6 +45,7 @@ def save_shapefile(gdf, folder_name, zip_name):
         shutil.rmtree(folder_name)
     os.makedirs(folder_name, exist_ok=True)
     shp_path = os.path.join(folder_name, "data.shp")
+    # Pastikan GeoDataFrame dalam 4326 untuk kompatibilitas SHP standar
     gdf.to_file(shp_path)
     zip_path = f"{zip_name}.zip"
     with zipfile.ZipFile(zip_path, "w") as zf:
@@ -115,15 +114,10 @@ if uploaded_pkkpr:
                             
                             # Logika pembalik urutan X/Y
                             if SWAP_COORDINATES:
-                                # Kolom pertama (Lintang/Y) dianggap X (Easting)
-                                # Kolom kedua (Bujur/X) dianggap Y (Northing)
                                 x_coord, y_coord = val1, val2 
                             else:
-                                # Kolom pertama (Lintang/Y) dianggap Y (Northing)
-                                # Kolom kedua (Bujur/X) dianggap X (Easting)
                                 y_coord, x_coord = val1, val2 
                             
-                            # Filter untuk memastikan ini adalah koordinat UTM
                             if y_coord > 1000 and x_coord < 1000000:
                                 coords_mentah.append((x_coord, y_coord)) 
                         except:
@@ -218,6 +212,9 @@ if gdf_polygon is not None:
     **Analisis Proyeksi Awal:**
     - Proyeksi Input yang Digunakan: **{UTM_CRS_INPUT} (UTM 53N)** dengan urutan koordinat dibalik.
     
+    **Analisis Lokasi (WGS 84):**
+    - Titik Tengah (Centroid): **{round(centroid.y, 4)}° LU, {round(centroid.x, 4)}° BT**
+    
     **Analisis Luas:**
     - Luas PKKPR (dokumen): **{luas_doc_str}**
     - Luas PKKPR (UTM Zona {utm_zone} - hasil hitungan): {format_angka_id(luas_pkkpr_hitung)} m²
@@ -284,7 +281,8 @@ if gdf_polygon is not None:
     st.subheader("🌍 Preview Peta Interaktif")
 
     centroid = gdf_polygon.geometry.centroid.iloc[0]
-    m = folium.Map(location=[centroid.y, centroid.x], zoom_start=17)
+    # Zoom start 14 (lebih zoom out untuk melihat daratan)
+    m = folium.Map(location=[centroid.y, centroid.x], zoom_start=14) 
     Fullscreen(position="bottomleft").add_to(m)
 
     folium.TileLayer(
