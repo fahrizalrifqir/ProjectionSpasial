@@ -16,9 +16,16 @@ import xyzservices.providers as xyz
 # ======================
 # === Konfigurasi App ===
 # ======================
-st.set_page_config(page_title="PKKPR → SHP & Overlay (Mode UTM)", layout="wide")
-st.title("PKKPR → Shapefile Converter & Overlay Tapak Proyek (Mode UTM)")
-st.warning("Mode ini secara eksplisit mengasumsikan koordinat input adalah **UTM WGS 84 Zona 53S** (EPSG:32753), yang paling sering memperbaiki masalah plot 'di tengah laut' untuk data Indonesia.")
+st.set_page_config(page_title="PKKPR → SHP & Overlay (Koreksi Proyeksi)", layout="wide")
+st.title("PKKPR → Shapefile Converter & Overlay Tapak Proyek")
+st.error("⚠️ **Koreksi Aktif:** Skrip ini mengasumsikan koordinat Anda menggunakan **UTM WGS 84 Zona 53S (EPSG:32753)** DAN memiliki urutan **X/Y (Easting/Northing) yang terbalik** dalam dokumen (Lintang dokumen = X, Bujur dokumen = Y).")
+
+# --- KONFIGURASI KRITIS ---
+# 1. Proyeksi yang paling sering benar untuk Halmahera Timur
+UTM_CRS_INPUT = "EPSG:32753"  # WGS 84 / UTM Zone 53S
+# 2. Bendera untuk membalik urutan pembacaan kolom (X, Y)
+SWAP_COORDINATES = True 
+# -------------------------
 
 # ======================
 # === Fungsi Helper ===
@@ -40,7 +47,6 @@ def save_shapefile(gdf, folder_name, zip_name):
         shutil.rmtree(folder_name)
     os.makedirs(folder_name, exist_ok=True)
     shp_path = os.path.join(folder_name, "data.shp")
-    # Pastikan GeoDataFrame dalam 4326 untuk kompatibilitas SHP standar
     gdf.to_file(shp_path)
     zip_path = f"{zip_name}.zip"
     with zipfile.ZipFile(zip_path, "w") as zf:
@@ -90,9 +96,6 @@ with col1:
 coords, gdf_points, gdf_polygon = [], None, None
 luas_pkkpr_doc, luas_pkkpr_doc_label = None, None
 
-# --- KONFIGURASI UTM KHUSUS UNTUK HALTIM ---
-UTM_CRS_INPUT = "EPSG:32753"  # WGS 84 / UTM Zone 53S
-
 if uploaded_pkkpr:
     if uploaded_pkkpr.name.endswith(".pdf"):
         coords_mentah = [] 
@@ -108,11 +111,20 @@ if uploaded_pkkpr:
                     mline = re.findall(r"[-+]?\d+\.\d+", line)
                     if len(mline) >= 2:
                         try:
-                            # mline[0] = Lintang (Y), mline[1] = Bujur (X)
-                            y_coord, x_coord = float(mline[0]), float(mline[1])
-                            # HANYA tambahkan jika angka-angkanya besar (khas UTM)
+                            val1, val2 = float(mline[0]), float(mline[1])
+                            
+                            # Logika pembalik urutan X/Y
+                            if SWAP_COORDINATES:
+                                # Kolom pertama (Lintang/Y) dianggap X (Easting)
+                                # Kolom kedua (Bujur/X) dianggap Y (Northing)
+                                x_coord, y_coord = val1, val2 
+                            else:
+                                # Kolom pertama (Lintang/Y) dianggap Y (Northing)
+                                # Kolom kedua (Bujur/X) dianggap X (Easting)
+                                y_coord, x_coord = val1, val2 
+                            
+                            # Filter untuk memastikan ini adalah koordinat UTM
                             if y_coord > 1000 and x_coord < 1000000:
-                                # PENTING: Simpan sebagai (X, Y) = (Bujur, Lintang)
                                 coords_mentah.append((x_coord, y_coord)) 
                         except:
                             pass
@@ -128,10 +140,14 @@ if uploaded_pkkpr:
                             nums = re.findall(r"[-+]?\d+\.\d+", row_join)
                             if len(nums) >= 2:
                                 try:
-                                    # nums[0] = Lintang (Y), nums[1] = Bujur (X)
-                                    y_coord, x_coord = float(nums[0]), float(nums[1])
+                                    val1, val2 = float(nums[0]), float(nums[1])
+                                    
+                                    if SWAP_COORDINATES:
+                                        x_coord, y_coord = val1, val2 
+                                    else:
+                                        y_coord, x_coord = val1, val2 
+                                        
                                     if y_coord > 1000 and x_coord < 1000000:
-                                        # PENTING: Simpan sebagai (X, Y) = (Bujur, Lintang)
                                         coords_mentah.append((x_coord, y_coord)) 
                                 except:
                                     pass
@@ -143,7 +159,7 @@ if uploaded_pkkpr:
         coords_mentah_xy = [(x, y) for x, y in coords_mentah]
         
         if coords_mentah_xy:
-            # Tutup poligon jika titik awal tidak sama dengan titik akhir
+            # Tutup poligon
             if coords_mentah_xy[0] != coords_mentah_xy[-1]:
                 coords_mentah_xy.append(coords_mentah_xy[0])
 
@@ -154,10 +170,10 @@ if uploaded_pkkpr:
                 crs=UTM_CRS_INPUT
             )
             
-            # Konversi GeoDataFrame Titik ke Lintang/Bujur (4326) untuk plotting
+            # Konversi GeoDataFrame Titik ke Lintang/Bujur (4326)
             gdf_points = gdf_points_utm.to_crs(epsg=4326)
 
-            # Buat Polygon dari titik-titik yang sudah dikonversi ke 4326
+            # Buat Polygon
             polygon_wgs84 = Polygon([p.coords[0] for p in gdf_points.geometry])
             gdf_polygon = gpd.GeoDataFrame(geometry=[polygon_wgs84], crs="EPSG:4326")
             
@@ -171,7 +187,6 @@ if uploaded_pkkpr:
 
 
     elif uploaded_pkkpr.name.endswith(".zip"):
-        # Logika pembacaan Shapefile (ZIP) tetap sama
         if os.path.exists("pkkpr_shp"):
             shutil.rmtree("pkkpr_shp")
         with zipfile.ZipFile(uploaded_pkkpr, "r") as z:
@@ -184,7 +199,6 @@ if uploaded_pkkpr:
 
 # === Ekspor SHP PKKPR ===
 if gdf_polygon is not None:
-    # Simpan sebagai 4326 (standar web mapping)
     zip_pkkpr_only = save_shapefile(gdf_polygon.to_crs(epsg=4326), "out_pkkpr_only", "PKKPR_Hasil_Konversi_UTM")
     with open(zip_pkkpr_only, "rb") as f:
         st.download_button("⬇️ Download SHP PKKPR (ZIP)", f, file_name="PKKPR_Hasil_Konversi_UTM.zip", mime="application/zip")
@@ -193,25 +207,20 @@ if gdf_polygon is not None:
 # === Analisis PKKPR Sendiri ===
 # ======================
 if gdf_polygon is not None:
-    # Karena sudah di konversi ke 4326, kita bisa mendapatkan centroid
     centroid = gdf_polygon.geometry.centroid.iloc[0]
     utm_epsg, utm_zone = get_utm_info(centroid.x, centroid.y)
     
-    # Hitung ulang luas di proyeksi UTM yang benar berdasarkan centroid 
     gdf_polygon_utm_calc = gdf_polygon.to_crs(epsg=utm_epsg)
     luas_pkkpr_hitung = gdf_polygon_utm_calc.area.sum()
-    gdf_polygon_3857 = gdf_polygon.to_crs(epsg=3857)
-    luas_pkkpr_mercator = gdf_polygon_3857.area.sum()
-
     luas_doc_str = f"{format_angka_id(luas_pkkpr_doc)} Ha ({luas_pkkpr_doc_label})" if luas_pkkpr_doc else "-"
+    
     st.info(f"""
     **Analisis Proyeksi Awal:**
-    - Proyeksi Input yang Digunakan: **{UTM_CRS_INPUT} (UTM 53S)**
+    - Proyeksi Input yang Digunakan: **{UTM_CRS_INPUT} (UTM 53S)** dengan urutan koordinat dibalik.
     
     **Analisis Luas:**
-    - Luas PKKPR (dokumen): **{luas_doc_str}** (Luas yang dimohon adalah **20.763 Ha** )
+    - Luas PKKPR (dokumen): **{luas_doc_str}**
     - Luas PKKPR (UTM Zona {utm_zone} - hasil hitungan): {format_angka_id(luas_pkkpr_hitung)} m²
-    - Luas PKKPR (proyeksi WGS 84 / Mercator): {format_angka_id(luas_pkkpr_mercator)} m²
     """)
     st.markdown("---")
 
@@ -247,7 +256,6 @@ else:
 if gdf_polygon is not None and gdf_tapak is not None:
     st.subheader("📊 Analisis Overlay PKKPR & Tapak Proyek")
     
-    # Gunakan EPSG UTM yang terdeteksi dari centroid untuk perhitungan yang akurat
     centroid = gdf_polygon.geometry.centroid.iloc[0]
     utm_epsg, utm_zone = get_utm_info(centroid.x, centroid.y)
     
@@ -264,7 +272,6 @@ if gdf_polygon is not None and gdf_tapak is not None:
     **Analisis Luas Tapak Proyek (Dalam Proyeksi UTM Zona {utm_zone}) :**
     - Total Luas Tapak Proyek: {format_angka_id(luas_tapak)} m²
     - Luas PKKPR (dokumen): {luas_doc_str}
-    - Luas PKKPR (UTM {utm_zone}): {format_angka_id(luas_pkkpr_hitung)} m²
     - Luas Tapak Proyek UTM di dalam PKKPR: **{format_angka_id(luas_overlap)} m²**
     - Luas Tapak Proyek UTM di luar PKKPR: **{format_angka_id(luas_outside)} m²**
     """)
@@ -281,38 +288,20 @@ if gdf_polygon is not None:
     Fullscreen(position="bottomleft").add_to(m)
 
     folium.TileLayer(
-        tiles="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        attr="© OpenStreetMap contributors",
-        name="OpenStreetMap"
-    ).add_to(m)
-
-    folium.TileLayer(
         tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         attr="Tiles © Esri",
         name="Esri World Imagery"
     ).add_to(m)
 
-    folium.TileLayer(
-        tiles="https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png",
-        attr="© CartoDB",
-        name="CartoDB Positron"
-    ).add_to(m)
-
-    folium.TileLayer(
-        tiles="https://stamen-tiles.a.ssl.fastly.net/terrain/{z}/{x}/{y}.png",
-        attr="Map tiles © Stamen Design, CC BY 3.0 — Map data © OpenStreetMap contributors",
-        name="Stamen Terrain"
-    ).add_to(m)
-
     folium.GeoJson(
-        gdf_polygon, # Sudah dalam 4326
+        gdf_polygon, 
         name="PKKPR",
         style_function=lambda x: {"color": "yellow", "weight": 2, "fillOpacity": 0}
     ).add_to(m)
 
     if 'gdf_tapak' in locals() and gdf_tapak is not None:
         folium.GeoJson(
-            gdf_tapak, # Sudah dalam 4326
+            gdf_tapak, 
             name="Tapak Proyek",
             style_function=lambda x: {"color": "red", "weight": 1, "fillColor": "red", "fillOpacity": 0.4}
         ).add_to(m)
@@ -370,7 +359,7 @@ if gdf_polygon is not None:
                     bbox_to_anchor=(0.98, 0.98), fontsize=8, title_fontsize=9,
                     markerscale=0.8, labelspacing=0.3, frameon=True, facecolor="white")
     leg.get_frame().set_alpha(0.7)
-    ax.set_title("Peta Kesesuaian Tapak Proyek dengan PKKPR (Asumsi UTM 53S)", fontsize=14, weight="bold")
+    ax.set_title("Peta Kesesuaian Tapak Proyek dengan PKKPR (Koreksi Proyeksi)", fontsize=14, weight="bold")
     ax.set_axis_off()
     plt.savefig(out_png, dpi=300, bbox_inches="tight")
 
