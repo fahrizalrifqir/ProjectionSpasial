@@ -1,8 +1,10 @@
 streamlit
-pdfplumber
-pymupdf
-pillow
-python-docx
-rapidfuzz
+geopandas
 pandas
-openpyxl
+shapely
+folium
+streamlit-folium
+pdfplumber
+matplotlib
+contextily
+xyzservices
