@@ -3,61 +3,64 @@ from PyPDF2 import PdfReader, PdfWriter
 import io
 import os
 
-st.set_page_config(page_title="PDF Splitter (Hal 1 & 2–Akhir)", page_icon="📄", layout="centered")
+st.set_page_config(page_title="PDF Splitter (Fleksibel)", page_icon="📄", layout="centered")
 
-st.title("📄 PDF Splitter — Pisahkan Halaman 1 dan Halaman 2–Akhir")
-st.write("Unggah PDF, lalu aplikasi ini akan otomatis membagi:")
-st.markdown("- 📘 **Halaman 1** → tetap dengan nama file asli\n- 📗 **Halaman 2 sampai terakhir** → diberi awalan **RPD_** pada nama file")
+st.title("📄 PDF Splitter — Pisahkan PDF Berdasarkan Rentang Halaman")
+st.write("Unggah PDF dan tentukan rentang halaman yang ingin dipisahkan, misalnya:")
+st.code("1-1,2-12", language="text")
+st.markdown("- 📘 Rentang pertama → nama file asli\n- 📗 Rentang berikutnya → diberi awalan **RPD_**")
 
 uploaded_file = st.file_uploader("📤 Upload file PDF", type=["pdf"])
 
 if uploaded_file is not None:
-    # Ambil nama file tanpa ekstensi
     original_name = os.path.splitext(uploaded_file.name)[0]
     reader = PdfReader(uploaded_file)
     total_pages = len(reader.pages)
-    
-    if total_pages < 2:
-        st.warning("⚠️ File PDF ini hanya memiliki 1 halaman, tidak bisa dipisah.")
-    else:
-        st.success(f"File terbaca: **{uploaded_file.name}** dengan {total_pages} halaman.")
+    st.success(f"File terbaca: **{uploaded_file.name}** dengan {total_pages} halaman.")
 
-        if st.button("🔪 Split Sekarang"):
-            try:
-                # === Split halaman 1 ===
-                writer1 = PdfWriter()
-                writer1.add_page(reader.pages[0])
-                output1 = io.BytesIO()
-                writer1.write(output1)
-                output1.seek(0)
+    rentang_input = st.text_input(
+        "Masukkan rentang halaman (contoh: 1-1,2-12)",
+        value="1-1,2-{}".format(total_pages)
+    )
 
-                # === Split halaman 2 sampai akhir ===
-                writer2 = PdfWriter()
-                for i in range(1, total_pages):
-                    writer2.add_page(reader.pages[i])
-                output2 = io.BytesIO()
-                writer2.write(output2)
-                output2.seek(0)
+    if st.button("🔪 Split Sekarang"):
+        try:
+            splits = []
+            for r in rentang_input.split(","):
+                if "-" in r:
+                    start, end = map(int, r.split("-"))
+                else:
+                    start = end = int(r)
+                splits.append((start, end))
 
-                # Buat nama file sesuai logika
-                output_name1 = f"{original_name}.pdf"
-                output_name2 = f"RPD_{original_name}.pdf"
+            output_files = []
+            for idx, (start, end) in enumerate(splits):
+                writer = PdfWriter()
+                for i in range(start - 1, end):
+                    if i < total_pages:
+                        writer.add_page(reader.pages[i])
+                output_buffer = io.BytesIO()
+                writer.write(output_buffer)
+                output_buffer.seek(0)
 
-                st.success("✅ Split berhasil! Unduh hasil di bawah ini:")
+                # Penamaan file
+                if idx == 0:
+                    output_name = f"{original_name}.pdf"
+                else:
+                    output_name = f"RPD_{original_name}_hal_{start}_sampai_{end}.pdf"
+
+                output_files.append((output_name, output_buffer))
+
+            st.success("✅ Split berhasil! Unduh hasil di bawah ini:")
+            for name, buf in output_files:
                 st.download_button(
-                    label=f"⬇️ Unduh Halaman 1 ({output_name1})",
-                    data=output1,
-                    file_name=output_name1,
+                    label=f"⬇️ Unduh {name}",
+                    data=buf,
+                    file_name=name,
                     mime="application/pdf"
                 )
-                st.download_button(
-                    label=f"⬇️ Unduh Halaman 2–{total_pages} ({output_name2})",
-                    data=output2,
-                    file_name=output_name2,
-                    mime="application/pdf"
-                )
 
-            except Exception as e:
-                st.error(f"Terjadi kesalahan: {e}")
+        except Exception as e:
+            st.error(f"Terjadi kesalahan: {e}")
 else:
     st.info("Unggah file PDF untuk memulai proses pemisahan.")
