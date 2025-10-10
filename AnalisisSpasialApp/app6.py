@@ -1,6 +1,6 @@
 import streamlit as st
 from PyPDF2 import PdfReader, PdfWriter
-import io, os
+import io, os, time
 
 st.set_page_config(page_title="PDF Splitter (Fleksibel)", page_icon="📄", layout="centered")
 
@@ -8,26 +8,30 @@ st.title("📄 Split PDF Berdasarkan Rentang Halaman")
 st.write("Unggah PDF dan tentukan rentang halaman yang ingin dipisahkan, misalnya:")
 st.code("1-1,2-12", language="text")
 
-# --- Upload File ---
-uploaded_file = st.file_uploader("📤 Upload file PDF", type=["pdf"])
+# ====== STATE INISIAL ======
+if "uploader_key" not in st.session_state:
+    st.session_state["uploader_key"] = str(time.time())  # unik setiap sesi
 
-# --- Tombol Reset Manual ---
-if uploaded_file and st.button("❌ Hapus File / Ganti File"):
-    # Kosongkan state upload & hasil split
-    st.session_state.pop("split_results", None)
-    st.session_state.pop("last_uploaded", None)
-    st.rerun()
+# ====== UPLOAD FILE ======
+uploaded_file = st.file_uploader("📤 Upload file PDF", type=["pdf"], key=st.session_state["uploader_key"])
 
-# --- Jika file diunggah ---
+# ====== TOMBOL HAPUS FILE ======
+if uploaded_file:
+    if st.button("❌ Hapus / Ganti File"):
+        # reset semua state & buat key baru agar uploader ter-refresh
+        st.session_state.clear()
+        st.session_state["uploader_key"] = str(time.time())
+        st.rerun()
+
+# ====== JIKA FILE ADA ======
 if uploaded_file is not None:
     original_name = os.path.splitext(uploaded_file.name)[0]
 
-    # Reset hasil lama jika file baru
+    # simpan nama file terakhir
     if "last_uploaded" not in st.session_state or st.session_state["last_uploaded"] != uploaded_file.name:
         st.session_state["split_results"] = []
         st.session_state["last_uploaded"] = uploaded_file.name
 
-    # Baca file PDF
     reader = PdfReader(uploaded_file)
     total_pages = len(reader.pages)
     st.success(f"File terbaca: **{uploaded_file.name}** dengan {total_pages} halaman.")
@@ -37,7 +41,6 @@ if uploaded_file is not None:
         value=f"1-1,2-{total_pages}"
     )
 
-    # Tombol Split
     if st.button("🔪 Split Sekarang"):
         try:
             splits = []
@@ -59,7 +62,6 @@ if uploaded_file is not None:
                 writer.write(buffer)
                 buffer.seek(0)
 
-                # Penamaan file: pertama = nama asli, sisanya = awalan RPD_
                 if idx == 0:
                     output_name = f"{original_name}.pdf"
                 else:
@@ -73,7 +75,7 @@ if uploaded_file is not None:
         except Exception as e:
             st.error(f"Terjadi kesalahan: {e}")
 
-    # --- Download hasil ---
+    # ====== DOWNLOAD HASIL ======
     if st.session_state.get("split_results"):
         for name, buf in st.session_state["split_results"]:
             st.download_button(
