@@ -4,30 +4,40 @@ import io, os
 
 st.set_page_config(page_title="PDF Splitter (Fleksibel)", page_icon="📄", layout="centered")
 
-st.title("📄 PDF Splitter — Pisahkan PDF Berdasarkan Rentang Halaman")
+st.title("📄 Split PDF Berdasarkan Rentang Halaman")
 st.write("Unggah PDF dan tentukan rentang halaman yang ingin dipisahkan, misalnya:")
 st.code("1-1,2-12", language="text")
 
 # --- Upload File ---
 uploaded_file = st.file_uploader("📤 Upload file PDF", type=["pdf"])
 
-# 🔹 Reset hasil lama jika upload baru
+# --- Tombol Reset Manual ---
+if uploaded_file and st.button("❌ Hapus File / Ganti File"):
+    # Kosongkan state upload & hasil split
+    st.session_state.pop("split_results", None)
+    st.session_state.pop("last_uploaded", None)
+    st.rerun()
+
+# --- Jika file diunggah ---
 if uploaded_file is not None:
-    # Dapatkan nama file baru
     original_name = os.path.splitext(uploaded_file.name)[0]
 
-    # Jika belum ada atau nama file berubah → reset session_state
+    # Reset hasil lama jika file baru
     if "last_uploaded" not in st.session_state or st.session_state["last_uploaded"] != uploaded_file.name:
         st.session_state["split_results"] = []
         st.session_state["last_uploaded"] = uploaded_file.name
 
+    # Baca file PDF
     reader = PdfReader(uploaded_file)
     total_pages = len(reader.pages)
     st.success(f"File terbaca: **{uploaded_file.name}** dengan {total_pages} halaman.")
 
-    rentang_input = st.text_input("Masukkan rentang halaman (contoh: 1-1,2-12)",
-                                  value=f"1-1,2-{total_pages}")
+    rentang_input = st.text_input(
+        "Masukkan rentang halaman (contoh: 1-1,2-12)",
+        value=f"1-1,2-{total_pages}"
+    )
 
+    # Tombol Split
     if st.button("🔪 Split Sekarang"):
         try:
             splits = []
@@ -49,7 +59,7 @@ if uploaded_file is not None:
                 writer.write(buffer)
                 buffer.seek(0)
 
-                # Penamaan file sesuai file terbaru
+                # Penamaan file: pertama = nama asli, sisanya = awalan RPD_
                 if idx == 0:
                     output_name = f"{original_name}.pdf"
                 else:
@@ -57,14 +67,13 @@ if uploaded_file is not None:
 
                 output_files.append((output_name, buffer))
 
-            # Simpan hasil ke session_state
             st.session_state["split_results"] = output_files
             st.success("✅ Split berhasil! Unduh hasil di bawah ini:")
 
         except Exception as e:
             st.error(f"Terjadi kesalahan: {e}")
 
-    # Tampilkan hasil split
+    # --- Download hasil ---
     if st.session_state.get("split_results"):
         for name, buf in st.session_state["split_results"]:
             st.download_button(
