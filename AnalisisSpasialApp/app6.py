@@ -1,6 +1,6 @@
 import streamlit as st
 from PyPDF2 import PdfReader, PdfWriter
-import io, os, time
+import io, os
 
 st.set_page_config(page_title="PDF Splitter (Fleksibel)", page_icon="📄", layout="centered")
 
@@ -8,26 +8,18 @@ st.title("📄 Split PDF Berdasarkan Rentang Halaman")
 st.write("Unggah PDF dan tentukan rentang halaman yang ingin dipisahkan, misalnya:")
 st.code("1-1,2-12", language="text")
 
-# ====== STATE INISIAL ======
-if "uploader_key" not in st.session_state:
-    st.session_state["uploader_key"] = str(time.time())  # unik setiap sesi
-
 # ====== UPLOAD FILE ======
-uploaded_file = st.file_uploader("📤 Upload file PDF", type=["pdf"], key=st.session_state["uploader_key"])
+uploaded_file = st.file_uploader("📤 Upload file PDF", type=["pdf"])
 
-# ====== TOMBOL HAPUS FILE ======
-if uploaded_file:
-    if st.button("❌ Hapus / Ganti File"):
-        # reset semua state & buat key baru agar uploader ter-refresh
-        st.session_state.clear()
-        st.session_state["uploader_key"] = str(time.time())
-        st.rerun()
+# ====== DETEKSI FILE DIHAPUS (KLIK X) ======
+if uploaded_file is None and "last_uploaded" in st.session_state:
+    st.session_state.clear()
 
 # ====== JIKA FILE ADA ======
 if uploaded_file is not None:
     original_name = os.path.splitext(uploaded_file.name)[0]
 
-    # simpan nama file terakhir
+    # Reset hasil lama jika file baru diunggah
     if "last_uploaded" not in st.session_state or st.session_state["last_uploaded"] != uploaded_file.name:
         st.session_state["split_results"] = []
         st.session_state["last_uploaded"] = uploaded_file.name
