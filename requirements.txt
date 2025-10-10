@@ -1,10 +1,2 @@
-streamlit
-geopandas
-pandas
-shapely
-folium
-streamlit-folium
-pdfplumber
-matplotlib
-contextily
-xyzservices
+streamlit==1.39.0
+PyPDF2==3.0.1
