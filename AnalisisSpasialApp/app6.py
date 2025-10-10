@@ -10,8 +10,10 @@ st.write("Unggah PDF dan tentukan rentang halaman yang ingin dipisahkan, misalny
 st.code("1-1,2-12", language="text")
 st.markdown("- 📘 Rentang pertama → nama file asli\n- 📗 Rentang berikutnya → diberi awalan **RPD_**")
 
+# --- Upload File ---
 uploaded_file = st.file_uploader("📤 Upload file PDF", type=["pdf"])
 
+# --- Jika ada file diupload ---
 if uploaded_file is not None:
     original_name = os.path.splitext(uploaded_file.name)[0]
     reader = PdfReader(uploaded_file)
@@ -20,9 +22,10 @@ if uploaded_file is not None:
 
     rentang_input = st.text_input(
         "Masukkan rentang halaman (contoh: 1-1,2-12)",
-        value="1-1,2-{}".format(total_pages)
+        value=f"1-1,2-{total_pages}"
     )
 
+    # --- Tombol Split ---
     if st.button("🔪 Split Sekarang"):
         try:
             splits = []
@@ -39,9 +42,10 @@ if uploaded_file is not None:
                 for i in range(start - 1, end):
                     if i < total_pages:
                         writer.add_page(reader.pages[i])
-                output_buffer = io.BytesIO()
-                writer.write(output_buffer)
-                output_buffer.seek(0)
+
+                buffer = io.BytesIO()
+                writer.write(buffer)
+                buffer.seek(0)
 
                 # Penamaan file
                 if idx == 0:
@@ -49,18 +53,25 @@ if uploaded_file is not None:
                 else:
                     output_name = f"RPD_{original_name}_hal_{start}_sampai_{end}.pdf"
 
-                output_files.append((output_name, output_buffer))
+                output_files.append((output_name, buffer))
 
-            st.success("✅ Split berhasil! Unduh hasil di bawah ini:")
-            for name, buf in output_files:
-                st.download_button(
-                    label=f"⬇️ Unduh {name}",
-                    data=buf,
-                    file_name=name,
-                    mime="application/pdf"
-                )
+            # Simpan hasil ke session_state agar tidak hilang setelah rerun
+            st.session_state["split_results"] = output_files
+            st.session_state["total_pages"] = total_pages
 
         except Exception as e:
             st.error(f"Terjadi kesalahan: {e}")
+
+    # --- Jika hasil split tersimpan, tampilkan tombol download ---
+    if "split_results" in st.session_state:
+        st.success("✅ Split berhasil! Unduh hasil di bawah ini:")
+        for name, buf in st.session_state["split_results"]:
+            st.download_button(
+                label=f"⬇️ Unduh {name}",
+                data=buf,
+                file_name=name,
+                mime="application/pdf",
+                key=name  # penting agar setiap tombol unik
+            )
 else:
     st.info("Unggah file PDF untuk memulai proses pemisahan.")
