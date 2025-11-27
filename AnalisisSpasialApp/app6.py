@@ -8,6 +8,7 @@ import img2pdf
 st.set_page_config(page_title="PDF Tools", page_icon="📄", layout="wide")
 st.title("📄 PDF Tools: Preview + Split + Compress")
 st.write("Unggah PDF, lihat preview halaman, split PDF, dan lihat perkiraan ukuran compress PDF.")
+st.code("Contoh rentang split: 1-2,3-5", language="text")
 
 # ===================== UPLOAD FILE ======================
 uploaded_file = st.file_uploader("📤 Upload file PDF", type=["pdf"])
@@ -47,6 +48,7 @@ if uploaded_file:
 
     # --------------------- KOLOM KANAN: SPLIT & COMPRESS ---------------------
     with col2:
+        # ---------- SPLIT PDF ----------
         st.subheader("✂️ Split PDF")
         default_range = f"1-2,3-{total_pages}" if total_pages > 2 else "1-1"
         rentang_input = st.text_input("Masukkan rentang halaman (contoh: 1-2,3-5):", value=default_range)
@@ -55,7 +57,6 @@ if uploaded_file:
             st.session_state["split_results"] = []
             st.session_state["last_uploaded"] = uploaded_file.name
 
-        # SPLIT PDF
         if st.button("🔪 Split Sekarang"):
             try:
                 splits = []
@@ -91,9 +92,10 @@ if uploaded_file:
                 st.download_button(f"⬇️ Unduh {name}", data=buf, file_name=name, mime="application/pdf", key=name)
 
         st.markdown("---")
+
+        # ---------- COMPRESS PDF ----------
         st.subheader("🗜 Compress PDF (perkiraan ukuran file)")
 
-        # ===================== PRE-COMPRESS SIMULASI ======================
         quality_map = {"Rendah":0.3, "Sedang":0.5, "Tinggi":0.8}
         compressed_files = {}
         for q, scale in quality_map.items():
@@ -104,13 +106,11 @@ if uploaded_file:
                 img_byte_arr = io.BytesIO()
                 img.save(img_byte_arr, format='PNG')
                 images.append(img_byte_arr.getvalue())
-            # Buat PDF sementara di memory
             pdf_buffer = io.BytesIO()
             pdf_buffer.write(img2pdf.convert(images))
             pdf_buffer.seek(0)
             compressed_files[q] = pdf_buffer
 
-        # Tampilkan ukuran file hasil compress
         st.write("Perkiraan ukuran file setelah compress:")
         for q, buf in compressed_files.items():
             size_kb = len(buf.getbuffer()) / 1024
