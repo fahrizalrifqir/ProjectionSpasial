@@ -1,80 +1,67 @@
 import streamlit as st
 from PyPDF2 import PdfReader, PdfWriter
 import fitz  # PyMuPDF
-from PIL import Image
 import io, os
 
 st.set_page_config(page_title="PDF Split + Preview", page_icon="📄", layout="centered")
 
 st.title("📄 PDF Split + Preview Halaman")
-st.write("Unggah PDF untuk melihat preview dan melakukan split.")
-st.code("Contoh rentang: 1-1,2-12", language="text")
+st.write("Unggah PDF, lihat preview thumbnail, dan split berdasarkan rentang halaman.")
+st.code("Contoh rentang: 1-2,3-5", language="text")
 
 # ===================== UPLOAD FILE ======================
 uploaded_file = st.file_uploader("📤 Upload file PDF", type=["pdf"])
 
-# Reset jika user klik ❌
 if uploaded_file is None and "last_uploaded" in st.session_state:
     st.session_state.clear()
 
 if uploaded_file:
-    # Baca PDF
     pdf_bytes = uploaded_file.read()
-    pdf_reader = PdfReader(io.BytesIO(pdf_bytes))
-    total_pages = len(pdf_reader.pages)
-
     pdf_name = os.path.splitext(uploaded_file.name)[0]
+
+    # ===================== BACA PDF ======================
+    try:
+        pdf_reader = PdfReader(io.BytesIO(pdf_bytes))
+        total_pages = len(pdf_reader.pages)
+        pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    except:
+        st.error("❌ Gagal membaca PDF. File mungkin corrupt atau terenkripsi.")
+        st.stop()
+
+    if total_pages < 1:
+        st.error("PDF tidak memiliki halaman atau tidak bisa dibaca.")
+        st.stop()
 
     st.success(f"File terbaca: **{uploaded_file.name}** dengan {total_pages} halaman.")
 
-    # ======================================================
-    # 1️⃣ PREVIEW HALAMAN PDF
-    # ======================================================
-    st.subheader("👁 Preview Halaman PDF")
+    # ===================== PREVIEW THUMBNAIL ======================
+    st.subheader("🔹 Preview Thumbnail PDF")
 
-    pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-
-    # Fix slider jika halaman cuma 1 (streamlit tidak boleh min=max)
-    if total_pages == 1:
-        page_num = st.slider(
-            "Pilih halaman:",
-            1, 2, 1,
-            help="PDF ini hanya memiliki 1 halaman."
-        )
-        page_num = 1  # force tetap halaman 1
-    else:
-        page_num = st.slider(
-            "Pilih halaman:",
-            1, total_pages, 1
-        )
-
-    try:
-        page = pdf_doc[page_num - 1]
-        pix = page.get_pixmap(matrix=fitz.Matrix(0.7, 0.7))
-        img = Image.open(io.BytesIO(pix.tobytes("png")))
-        st.image(img, caption=f"Halaman {page_num}", use_column_width=True)
-
-    except Exception as e:
-        st.error(f"Gagal menampilkan preview: {e}")
+    cols = st.columns(5)  # grid 5 kolom
+    for i in range(total_pages):
+        try:
+            pix = pdf_doc[i].get_pixmap(matrix=fitz.Matrix(0.3, 0.3))  # thumbnail lebih kecil
+            img_bytes = pix.tobytes("png")
+            with cols[i % 5]:
+                st.image(img_bytes, caption=f"{i+1}", use_column_width=True)
+        except:
+            st.warning(f"Gagal memuat halaman {i+1}")
 
     st.markdown("---")
 
-    # ======================================================
-    # 2️⃣ FITUR SPLIT TETAP ADA & TIDAK DIHILANGKAN
-    # ======================================================
+    # ===================== INPUT RENTANG HALAMAN UNTUK SPLIT ======================
     st.subheader("✂️ Split PDF Berdasarkan Rentang Halaman")
+    default_range = f"1-2,3-{total_pages}" if total_pages > 2 else "1-1"
+    rentang_input = st.text_input(
+        "Masukkan rentang halaman (contoh: 1-2,3-5):",
+        value=default_range
+    )
 
     if "last_uploaded" not in st.session_state or st.session_state["last_uploaded"] != uploaded_file.name:
         st.session_state["split_results"] = []
         st.session_state["last_uploaded"] = uploaded_file.name
 
-    default_range = f"1-1,2-{total_pages}" if total_pages > 1 else "1-1"
-
-    rentang_input = st.text_input(
-        "Masukkan rentang halaman:",
-        value=default_range
-    )
-
+    # ===================== SPLIT PDF ======================
     if st.button("🔪 Split Sekarang"):
         try:
             splits = []
@@ -86,10 +73,8 @@ if uploaded_file:
                 splits.append((start, end))
 
             output_files = []
-
-            for i, (start, end) in enumerate(splits):
+            for idx, (start, end) in enumerate(splits):
                 writer = PdfWriter()
-
                 for p in range(start - 1, end):
                     if 0 <= p < total_pages:
                         writer.add_page(pdf_reader.pages[p])
@@ -98,7 +83,7 @@ if uploaded_file:
                 writer.write(buf)
                 buf.seek(0)
 
-                if i == 0:
+                if idx == 0:
                     file_name = f"{pdf_name}.pdf"
                 else:
                     file_name = f"RPD_{pdf_name}_hal_{start}_sampai_{end}.pdf"
@@ -123,4 +108,4 @@ if uploaded_file:
             )
 
 else:
-    st.info("Silakan upload PDF untuk memulai.")
+    st.info("Silakan upload PDF untuk memulai proses preview dan split.")
