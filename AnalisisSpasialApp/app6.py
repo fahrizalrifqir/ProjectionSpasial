@@ -1,13 +1,13 @@
 import streamlit as st
-from PyPDF2 import PdfReader, PdfWriter
+from PyPDF2 import PdfReader, PdfWriter, PdfMerger
 import fitz  # PyMuPDF
 import io, os
 from PIL import Image
 import img2pdf
 
 st.set_page_config(page_title="PDF Tools", page_icon="📄", layout="wide")
-st.title("📄 PDF Tools: Preview + Split + Compress")
-st.write("Unggah PDF, lihat preview halaman, split PDF, dan compress dengan perkiraan ukuran file.")
+st.title("📄 PDF Tools: Preview + Split + Compress + Merge")
+st.write("Unggah PDF, lihat preview halaman, split PDF, compress PDF, dan merge PDF.")
 st.code("Contoh rentang split: 1-2,3-5", language="text")
 
 # ===================== UPLOAD FILE ======================
@@ -47,7 +47,7 @@ if uploaded_file:
         page_num = st.slider("Pilih halaman:", min_value=1, max_value=total_pages, value=1, step=1)
         try:
             page = pdf_doc[page_num - 1]
-            pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
+            pix = page.get_pixmap(matrix=fitz.Matrix(0.8, 0.8))
             img = Image.open(io.BytesIO(pix.tobytes("png")))
             st.image(img, caption=f"Halaman {page_num}", use_column_width=True)
         except Exception as e:
@@ -92,15 +92,19 @@ if uploaded_file:
             except Exception as e:
                 st.error(f"Error split: {e}")
 
-        # Download hasil split
-        if st.session_state.get("split_results"):
-            for name, buf in st.session_state["split_results"]:
-                st.download_button(f"⬇️ Unduh {name}", data=buf, file_name=name, mime="application/pdf", key=name)
+        # Tombol download split (2 baris)
+        split_files = st.session_state.get("split_results", [])
+        for i in range(0, len(split_files), 2):
+            cols = st.columns(2)
+            for j, col in enumerate(cols):
+                if i+j < len(split_files):
+                    name, buf = split_files[i+j]
+                    col.download_button(f"⬇️ {name}", data=buf, file_name=name, mime="application/pdf", key=f"split_{i+j}")
 
         st.markdown("---")
 
         # ---------- COMPRESS PDF ----------
-        st.subheader("🗜 Compress PDF ")
+        st.subheader("🗜 Compress PDF (perkiraan ukuran file + download)")
 
         if "compressed_files" not in st.session_state:
             st.session_state["compressed_files"] = {}
@@ -132,19 +136,52 @@ if uploaded_file:
 
             st.success("✅ Compress selesai! Tombol download tersedia.")
 
-        # Tombol download compress dengan ukuran file
-        for q, buf in st.session_state.get("compressed_files", {}).items():
-            size_kb = len(buf.getbuffer()) / 1024
-            size_str = f"{size_kb:.2f} KB" if size_kb < 1024 else f"{size_kb/1024:.2f} MB"
-            st.download_button(
-                label=f"⬇️ {q} : {size_str}",
-                data=buf,
-                file_name=f"{pdf_name}_compressed_{q}.pdf",
-                mime="application/pdf",
-                key=f"comp_{q}"
-            )
+        # Tombol download compress (2 baris)
+        compressed_files = list(st.session_state.get("compressed_files", {}).items())
+        for i in range(0, len(compressed_files), 2):
+            cols = st.columns(2)
+            for j, col in enumerate(cols):
+                if i+j < len(compressed_files):
+                    q, buf = compressed_files[i+j]
+                    size_kb = len(buf.getbuffer()) / 1024
+                    size_str = f"{size_kb:.2f} KB" if size_kb < 1024 else f"{size_kb/1024:.2f} MB"
+                    col.download_button(
+                        label=f"⬇️ {q} : {size_str}",
+                        data=buf,
+                        file_name=f"{pdf_name}_compressed_{q}.pdf",
+                        mime="application/pdf",
+                        key=f"comp_{q}"
+                    )
+
+        st.markdown("---")
+
+        # ---------- MERGE PDF ----------
+        st.subheader("🔗 Merge PDF (maks 5 file)")
+
+        uploaded_merge_files = st.file_uploader(
+            "📤 Upload hingga 5 file PDF untuk merge", 
+            type="pdf", 
+            accept_multiple_files=True, 
+            key="merge_uploader"
+        )
+
+        if uploaded_merge_files:
+            if len(uploaded_merge_files) > 5:
+                st.error("❌ Maksimal 5 file untuk merge!")
+            else:
+                if st.button("🔗 Merge PDF"):
+                    merger = PdfMerger()
+                    for f in uploaded_merge_files:
+                        merger.append(f)
+                    buf = io.BytesIO()
+                    merger.write(buf)
+                    buf.seek(0)
+                    st.download_button(
+                        label=f"⬇️ Unduh PDF Hasil Merge",
+                        data=buf,
+                        file_name="merged.pdf",
+                        mime="application/pdf"
+                    )
 
 else:
-    st.info("Silakan upload PDF untuk memulai preview, split, dan compress.")
-
-
+    st.info("Silakan upload PDF untuk memulai preview, split, compress, dan merge.")
