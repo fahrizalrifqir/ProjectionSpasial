@@ -63,10 +63,10 @@ if uploaded_file:
                 step=1
             )
 
-        # Render halaman dengan kualitas lebih tinggi
+        # Render halaman dengan kualitas lebih tinggi (preview lebih jelas)
         try:
             page = pdf_doc[page_num - 1]
-            pix = page.get_pixmap(matrix=fitz.Matrix(0.8, 0.8))  # kualitas preview meningkat
+            pix = page.get_pixmap(matrix=fitz.Matrix(0.8, 0.8))
             img = Image.open(io.BytesIO(pix.tobytes("png")))
             st.image(img, caption=f"Halaman {page_num}", use_column_width=True)
         except Exception as e:
@@ -135,19 +135,20 @@ if uploaded_file:
 
         # --------------------- COMPRESS PDF ---------------------
         st.subheader("🗜 Compress PDF")
-if st.button("Compress PDF"):
-    try:
-        compressed_file_name = f"compressed_{uploaded_file.name}"
-        with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
-            pdf.save(compressed_file_name)  # tanpa optimize_streams
-        with open(compressed_file_name, "rb") as f:
-            st.download_button(
-                "⬇️ Unduh PDF Terkompres",
-                data=f,
-                file_name=compressed_file_name,
-                mime="application/pdf"
-            )
-    except Exception as e:
-        st.error(f"Gagal kompres PDF: {e}")
+        if st.button("Compress PDF"):
+            try:
+                compressed_file_name = f"compressed_{uploaded_file.name}"
+                with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
+                    pdf.save(compressed_file_name)  # compatible dengan pikepdf terbaru
+                with open(compressed_file_name, "rb") as f:
+                    st.download_button(
+                        "⬇️ Unduh PDF Terkompres",
+                        data=f,
+                        file_name=compressed_file_name,
+                        mime="application/pdf"
+                    )
+            except Exception as e:
+                st.error(f"Gagal kompres PDF: {e}")
 
-
+else:
+    st.info("Silakan upload PDF untuk memulai preview, split, dan compress.")
