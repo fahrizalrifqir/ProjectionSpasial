@@ -47,7 +47,7 @@ if uploaded_file:
         page_num = st.slider("Pilih halaman:", min_value=1, max_value=total_pages, value=1, step=1)
         try:
             page = pdf_doc[page_num - 1]
-            pix = page.get_pixmap(matrix=fitz.Matrix(0.8, 0.8))
+            pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
             img = Image.open(io.BytesIO(pix.tobytes("png")))
             st.image(img, caption=f"Halaman {page_num}", use_column_width=True)
         except Exception as e:
@@ -146,3 +146,4 @@ if uploaded_file:
 
 else:
     st.info("Silakan upload PDF untuk memulai preview, split, dan compress.")
+
