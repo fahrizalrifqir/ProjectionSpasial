@@ -44,7 +44,7 @@ if fitur in ["Split PDF", "Compress PDF"]:
             page_num = st.slider("Pilih halaman:", 1, total_pages, 1)
             try:
                 page = pdf_doc[page_num - 1]
-                pix = page.get_pixmap(matrix=fitz.Matrix(0.8, 0.8))
+                pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
                 img = Image.open(io.BytesIO(pix.tobytes("png")))
                 st.image(img, caption=f"Halaman {page_num}", use_column_width=True)
             except Exception as e:
@@ -168,3 +168,4 @@ elif fitur=="Merge PDF":
                 merger.write(buf)
                 buf.seek(0)
                 st.download_button("⬇️ Unduh PDF Hasil Merge", data=buf, file_name="merged.pdf", mime="application/pdf")
+
