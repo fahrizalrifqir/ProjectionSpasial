@@ -6,7 +6,7 @@ from PIL import Image
 
 st.set_page_config(page_title="PDF Split + Preview", page_icon="📄", layout="wide")
 
-st.title("📄 PDF Split + Slider Preview (Dua Kolom)")
+st.title("📄 PDF Split ")
 
 st.write("Unggah PDF, lihat preview halaman dengan slider di kiri, dan split PDF di kanan.")
 st.code("Contoh rentang split: 1-2,3-5", language="text")
@@ -132,3 +132,4 @@ if uploaded_file:
 
 else:
     st.info("Silakan upload PDF untuk memulai preview dan split.")
+
