@@ -100,7 +100,7 @@ if uploaded_file:
         st.markdown("---")
 
         # ---------- COMPRESS PDF ----------
-        st.subheader("🗜 Compress PDF (perkiraan ukuran file + download)")
+        st.subheader("🗜 Compress PDF ")
 
         if "compressed_files" not in st.session_state:
             st.session_state["compressed_files"] = {}
@@ -146,4 +146,5 @@ if uploaded_file:
 
 else:
     st.info("Silakan upload PDF untuk memulai preview, split, dan compress.")
+
 
