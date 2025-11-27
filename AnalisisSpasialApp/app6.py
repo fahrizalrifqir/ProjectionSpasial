@@ -2,12 +2,13 @@ import streamlit as st
 from PyPDF2 import PdfReader, PdfWriter
 import fitz  # PyMuPDF
 import io, os
+from PIL import Image
 
 st.set_page_config(page_title="PDF Split + Preview", page_icon="📄", layout="centered")
 
-st.title("📄 PDF Split + Preview Halaman")
-st.write("Unggah PDF, lihat preview thumbnail, dan split berdasarkan rentang halaman.")
-st.code("Contoh rentang: 1-2,3-5", language="text")
+st.title("📄 PDF Split + Slider Preview")
+st.write("Unggah PDF, lihat preview halaman dengan slider, dan split berdasarkan rentang halaman.")
+st.code("Contoh rentang split: 1-2,3-5", language="text")
 
 # ===================== UPLOAD FILE ======================
 uploaded_file = st.file_uploader("📤 Upload file PDF", type=["pdf"])
@@ -34,18 +35,38 @@ if uploaded_file:
 
     st.success(f"File terbaca: **{uploaded_file.name}** dengan {total_pages} halaman.")
 
-    # ===================== PREVIEW THUMBNAIL ======================
-    st.subheader("🔹 Preview Thumbnail PDF")
+    # ===================== SLIDER PREVIEW HALAMAN ======================
+    st.subheader("🔹 Preview Halaman PDF")
+    st.write("Gunakan slider untuk memilih halaman yang ingin dilihat.")
 
-    cols = st.columns(5)  # grid 5 kolom
-    for i in range(total_pages):
-        try:
-            pix = pdf_doc[i].get_pixmap(matrix=fitz.Matrix(0.3, 0.3))  # thumbnail lebih kecil
-            img_bytes = pix.tobytes("png")
-            with cols[i % 5]:
-                st.image(img_bytes, caption=f"{i+1}", use_column_width=True)
-        except:
-            st.warning(f"Gagal memuat halaman {i+1}")
+    # Slider halaman (anti-error jika total_pages=1)
+    if total_pages == 1:
+        page_num = st.slider(
+            "Pilih halaman:",
+            min_value=1,
+            max_value=2,
+            value=1,
+            step=1,
+            help="PDF ini hanya memiliki 1 halaman."
+        )
+        page_num = 1  # force tetap halaman 1
+    else:
+        page_num = st.slider(
+            "Pilih halaman:",
+            min_value=1,
+            max_value=total_pages,
+            value=1,
+            step=1
+        )
+
+    # Render halaman diperkecil/lebih besar dari thumbnail
+    try:
+        page = pdf_doc[page_num - 1]
+        pix = page.get_pixmap(matrix=fitz.Matrix(0.8, 0.8))  # sedikit lebih besar dari thumbnail
+        img = Image.open(io.BytesIO(pix.tobytes("png")))
+        st.image(img, caption=f"Halaman {page_num}", use_column_width=True)
+    except Exception as e:
+        st.error(f"Gagal menampilkan preview halaman: {e}")
 
     st.markdown("---")
 
@@ -108,4 +129,4 @@ if uploaded_file:
             )
 
 else:
-    st.info("Silakan upload PDF untuk memulai proses preview dan split.")
+    st.info("Silakan upload PDF untuk memulai preview dan split.")
