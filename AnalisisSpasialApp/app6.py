@@ -1,6 +1,6 @@
 import streamlit as st
 from PyPDF2 import PdfReader, PdfWriter
-import fitz  # PyMuPDF untuk preview halaman
+import fitz  # PyMuPDF untuk render preview
 import io, os
 
 st.set_page_config(page_title="PDF Splitter (Fleksibel)", page_icon="📄", layout="centered")
@@ -25,30 +25,30 @@ if uploaded_file is not None:
         st.session_state["split_results"] = []
         st.session_state["last_uploaded"] = uploaded_file.name
 
+    # PyPDF2 membaca langsung dari uploaded_file
     reader = PdfReader(uploaded_file)
     total_pages = len(reader.pages)
     st.success(f"File terbaca: **{uploaded_file.name}** dengan {total_pages} halaman.")
 
     # ===========================================================
-    #                🔍 PREVIEW PDF PERTI HALAMAN
+    #                     🔍 PREVIEW HALAMAN PDF
     # ===========================================================
     st.subheader("🔍 Preview Halaman PDF")
 
-    pdf_bytes = uploaded_file.read()
-    uploaded_file.seek(0)  # reset posisi baca file
-
+    pdf_bytes = uploaded_file.getvalue()  # ⭐ Tidak mengubah pointer file
     pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
 
     cols = st.columns(3)
-    for i in range(total_pages):
-        pix = pdf_doc[i].get_pixmap(matrix=fitz.Matrix(0.4, 0.4))  # scale untuk ukuran preview
-        img_bytes = pix.tobytes("png")
+    for i in range(len(pdf_doc)):
+        try:
+            pix = pdf_doc[i].get_pixmap(matrix=fitz.Matrix(0.4, 0.4))  # resize thumbnail
+            img_bytes = pix.tobytes("png")
 
-        with cols[i % 3]:
-            st.image(img_bytes, caption=f"Halaman {i+1}")
+            with cols[i % 3]:
+                st.image(img_bytes, caption=f"Halaman {i+1}")
 
-    # Kembalikan pointer file untuk PyPDF2
-    uploaded_file.seek(0)
+        except Exception as e:
+            st.error(f"Gagal render halaman {i+1}: {e}")
 
     # ===========================================================
 
