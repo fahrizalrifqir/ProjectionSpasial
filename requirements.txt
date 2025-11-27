@@ -1,6 +1,5 @@
-streamlit>=1.24.0
+streamlit>=1.25.0
 PyPDF2>=3.0.0
-pymupdf>=1.23.1
-pillow>=10.0.0
-pikepdf>=8.3.0
-img2pdf
+pymupdf>=1.22.5
+Pillow>=10.0.0
+img2pdf>=0.4.3
