@@ -7,7 +7,7 @@ import img2pdf
 
 st.set_page_config(page_title="PDF Tools", page_icon="📄", layout="wide")
 st.title("📄 PDF Tools: Preview + Split + Compress")
-st.write("Unggah PDF, lihat preview halaman, split PDF, dan lihat perkiraan ukuran compress PDF.")
+st.write("Unggah PDF, lihat preview halaman, split PDF, dan download PDF dengan perkiraan ukuran.")
 st.code("Contoh rentang split: 1-2,3-5", language="text")
 
 # ===================== UPLOAD FILE ======================
@@ -94,9 +94,8 @@ if uploaded_file:
         st.markdown("---")
 
         # ---------- COMPRESS PDF ----------
-        st.subheader("🗜 Compress PDF (perkiraan ukuran file)")
+        st.subheader("🗜 Compress PDF (perkiraan ukuran file + download)")
 
-        # Scale & JPEG quality untuk tiap level
         quality_map = {
             "Sangat Rendah": {"scale":0.5, "jpeg_quality":50},
             "Rendah": {"scale":0.6, "jpeg_quality":65},
@@ -121,12 +120,17 @@ if uploaded_file:
             pdf_buffer.seek(0)
             compressed_files[q] = pdf_buffer
 
-        st.write("compress:")
+        # Tombol download + perkiraan ukuran file
         for q, buf in compressed_files.items():
             size_kb = len(buf.getbuffer()) / 1024
-            st.write(f"- {q}: {size_kb:.2f} KB")
-            st.download_button(f"⬇️ Unduh PDF {q}", data=buf, file_name=f"{pdf_name}_compressed_{q}.pdf", mime="application/pdf", key=f"comp_{q} {size_kb:.2f} KB ")
+            size_str = f"{size_kb:.2f} KB" if size_kb < 1024 else f"{size_kb/1024:.2f} MB"
+            st.download_button(
+                label=f"⬇️ {q} : {size_str}",
+                data=buf,
+                file_name=f"{pdf_name}_compressed_{q}.pdf",
+                mime="application/pdf",
+                key=f"comp_{q}"
+            )
 
 else:
     st.info("Silakan upload PDF untuk memulai preview, split, dan compress.")
-
