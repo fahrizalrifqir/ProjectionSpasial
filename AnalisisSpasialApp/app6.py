@@ -7,18 +7,25 @@ import img2pdf
 
 st.set_page_config(page_title="PDF Tools", page_icon="📄", layout="wide")
 st.title("📄 PDF Tools: Preview + Split + Compress")
-st.write("Unggah PDF, lihat preview halaman, split PDF, dan download PDF dengan perkiraan ukuran.")
+st.write("Unggah PDF, lihat preview halaman, split PDF, dan compress dengan perkiraan ukuran file.")
 st.code("Contoh rentang split: 1-2,3-5", language="text")
 
 # ===================== UPLOAD FILE ======================
 uploaded_file = st.file_uploader("📤 Upload file PDF", type=["pdf"])
 
-if uploaded_file is None and "last_uploaded" in st.session_state:
-    st.session_state.clear()
+# Jika upload baru, hapus semua data session_state terkait PDF sebelumnya
+if uploaded_file:
+    if "last_uploaded" in st.session_state and st.session_state["last_uploaded"] != uploaded_file.name:
+        keys_to_clear = ["split_results", "compressed_files", "last_uploaded"]
+        for k in keys_to_clear:
+            if k in st.session_state:
+                del st.session_state[k]
 
 if uploaded_file:
     pdf_bytes = uploaded_file.read()
     pdf_name = os.path.splitext(uploaded_file.name)[0]
+
+    st.session_state["last_uploaded"] = uploaded_file.name
 
     # ===================== BACA PDF ======================
     try:
@@ -53,9 +60,8 @@ if uploaded_file:
         default_range = f"1-2,3-{total_pages}" if total_pages > 2 else "1-1"
         rentang_input = st.text_input("Masukkan rentang halaman (contoh: 1-2,3-5):", value=default_range)
 
-        if "last_uploaded" not in st.session_state or st.session_state["last_uploaded"] != uploaded_file.name:
+        if "split_results" not in st.session_state:
             st.session_state["split_results"] = []
-            st.session_state["last_uploaded"] = uploaded_file.name
 
         if st.button("🔪 Split Sekarang"):
             try:
@@ -96,32 +102,38 @@ if uploaded_file:
         # ---------- COMPRESS PDF ----------
         st.subheader("🗜 Compress PDF (perkiraan ukuran file + download)")
 
-        quality_map = {
-            "Sangat Rendah": {"scale":0.5, "jpeg_quality":50},
-            "Rendah": {"scale":0.6, "jpeg_quality":65},
-            "Sedang": {"scale":0.7, "jpeg_quality":80},
-            "Tinggi": {"scale":0.8, "jpeg_quality":90},
-        }
+        if "compressed_files" not in st.session_state:
+            st.session_state["compressed_files"] = {}
 
-        compressed_files = {}
-        for q, settings in quality_map.items():
-            scale = settings["scale"]
-            jpeg_q = settings["jpeg_quality"]
-            images = []
-            for page in pdf_doc:
-                pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
-                img = Image.open(io.BytesIO(pix.tobytes("png")))
-                img_byte_arr = io.BytesIO()
-                img.save(img_byte_arr, format='JPEG', quality=jpeg_q)
-                images.append(img_byte_arr.getvalue())
+        if st.button("Proses Compress"):
+            st.session_state["compressed_files"] = {}  # reset sebelumnya
+            quality_map = {
+                "Sangat Rendah": {"scale":0.5, "jpeg_quality":50},
+                "Rendah": {"scale":0.6, "jpeg_quality":65},
+                "Sedang": {"scale":0.7, "jpeg_quality":80},
+                "Tinggi": {"scale":0.8, "jpeg_quality":90},
+            }
 
-            pdf_buffer = io.BytesIO()
-            pdf_buffer.write(img2pdf.convert(images))
-            pdf_buffer.seek(0)
-            compressed_files[q] = pdf_buffer
+            for q, settings in quality_map.items():
+                scale = settings["scale"]
+                jpeg_q = settings["jpeg_quality"]
+                images = []
+                for page in pdf_doc:
+                    pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
+                    img = Image.open(io.BytesIO(pix.tobytes("png")))
+                    img_byte_arr = io.BytesIO()
+                    img.save(img_byte_arr, format='JPEG', quality=jpeg_q)
+                    images.append(img_byte_arr.getvalue())
 
-        # Tombol download + perkiraan ukuran file
-        for q, buf in compressed_files.items():
+                pdf_buffer = io.BytesIO()
+                pdf_buffer.write(img2pdf.convert(images))
+                pdf_buffer.seek(0)
+                st.session_state["compressed_files"][q] = pdf_buffer
+
+            st.success("✅ Compress selesai! Tombol download tersedia.")
+
+        # Tombol download compress dengan ukuran file
+        for q, buf in st.session_state.get("compressed_files", {}).items():
             size_kb = len(buf.getbuffer()) / 1024
             size_str = f"{size_kb:.2f} KB" if size_kb < 1024 else f"{size_kb/1024:.2f} MB"
             st.download_button(
