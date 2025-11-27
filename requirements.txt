@@ -3,3 +3,4 @@ PyPDF2>=3.0.0
 pymupdf>=1.23.1
 pillow>=10.0.0
 pikepdf>=8.3.0
+img2pdf
