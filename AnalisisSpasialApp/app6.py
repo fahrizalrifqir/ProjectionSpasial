@@ -3,10 +3,11 @@ from PyPDF2 import PdfReader, PdfWriter
 import fitz  # PyMuPDF
 import io, os
 from PIL import Image
+import img2pdf
 
 st.set_page_config(page_title="PDF Tools", page_icon="📄", layout="wide")
 st.title("📄 PDF Tools: Preview + Split + Compress")
-st.write("Unggah PDF, lihat preview halaman, split PDF, dan compress PDF dengan pilihan kualitas.")
+st.write("Unggah PDF, lihat preview halaman, split PDF, dan lihat perkiraan ukuran compress PDF.")
 
 # ===================== UPLOAD FILE ======================
 uploaded_file = st.file_uploader("📤 Upload file PDF", type=["pdf"])
@@ -38,7 +39,7 @@ if uploaded_file:
         page_num = st.slider("Pilih halaman:", min_value=1, max_value=total_pages, value=1, step=1)
         try:
             page = pdf_doc[page_num - 1]
-            pix = page.get_pixmap(matrix=fitz.Matrix(0.8, 0.8))  # preview cukup jelas
+            pix = page.get_pixmap(matrix=fitz.Matrix(0.8, 0.8))
             img = Image.open(io.BytesIO(pix.tobytes("png")))
             st.image(img, caption=f"Halaman {page_num}", use_column_width=True)
         except Exception as e:
@@ -54,6 +55,7 @@ if uploaded_file:
             st.session_state["split_results"] = []
             st.session_state["last_uploaded"] = uploaded_file.name
 
+        # SPLIT PDF
         if st.button("🔪 Split Sekarang"):
             try:
                 splits = []
@@ -89,37 +91,31 @@ if uploaded_file:
                 st.download_button(f"⬇️ Unduh {name}", data=buf, file_name=name, mime="application/pdf", key=name)
 
         st.markdown("---")
-        st.subheader("🗜 Compress PDF")
-        quality = st.selectbox("Pilih kualitas compress:", ["Rendah", "Sedang", "Tinggi"])
+        st.subheader("🗜 Compress PDF (perkiraan ukuran file)")
 
-        # Set scale sesuai kualitas
-        if quality=="Rendah":
-            scale = 0.3
-        elif quality=="Sedang":
-            scale = 0.5
-        else:
-            scale = 0.8
+        # ===================== PRE-COMPRESS SIMULASI ======================
+        quality_map = {"Rendah":0.3, "Sedang":0.5, "Tinggi":0.8}
+        compressed_files = {}
+        for q, scale in quality_map.items():
+            images = []
+            for page in pdf_doc:
+                pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
+                img = Image.open(io.BytesIO(pix.tobytes("png")))
+                img_byte_arr = io.BytesIO()
+                img.save(img_byte_arr, format='PNG')
+                images.append(img_byte_arr.getvalue())
+            # Buat PDF sementara di memory
+            pdf_buffer = io.BytesIO()
+            pdf_buffer.write(img2pdf.convert(images))
+            pdf_buffer.seek(0)
+            compressed_files[q] = pdf_buffer
 
-        if st.button("Compress PDF"):
-            try:
-                new_pdf = fitz.open()
-                size_preview = []
-                for page in pdf_doc:
-                    pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
-                    img_pdf = fitz.open("pdf", pix.tobytes("pdf"))
-                    new_pdf.insert_pdf(img_pdf)
-                compressed_file_name = f"{pdf_name}_compressed_{quality}.pdf"
-                new_pdf.save(compressed_file_name)
-
-                # Tampilkan ukuran file
-                file_size = os.path.getsize(compressed_file_name)/1024  # KB
-                st.write(f"Ukuran file setelah compress ({quality}): {file_size:.2f} KB")
-
-                with open(compressed_file_name, "rb") as f:
-                    st.download_button("⬇️ Unduh PDF Terkompres", data=f, file_name=compressed_file_name, mime="application/pdf")
-
-            except Exception as e:
-                st.error(f"Gagal compress PDF: {e}")
+        # Tampilkan ukuran file hasil compress
+        st.write("Perkiraan ukuran file setelah compress:")
+        for q, buf in compressed_files.items():
+            size_kb = len(buf.getbuffer()) / 1024
+            st.write(f"- {q}: {size_kb:.2f} KB")
+            st.download_button(f"⬇️ Unduh PDF {q}", data=buf, file_name=f"{pdf_name}_compressed_{q}.pdf", mime="application/pdf", key=f"comp_{q}")
 
 else:
     st.info("Silakan upload PDF untuk memulai preview, split, dan compress.")
