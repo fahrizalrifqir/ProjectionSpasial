@@ -6,7 +6,7 @@ from PIL import Image
 import img2pdf
 
 st.set_page_config(page_title="PDF Tools", page_icon="📄", layout="wide")
-st.title("📄 PDF Tools: Preview + Split + Compress + Merge")
+st.title("📄 PDF Tools")
 
 # ===== PILIH FITUR =====
 fitur = st.selectbox("Pilih fitur yang ingin digunakan:", ["Split PDF", "Compress PDF", "Merge PDF"])
@@ -168,4 +168,5 @@ elif fitur=="Merge PDF":
                 merger.write(buf)
                 buf.seek(0)
                 st.download_button("⬇️ Unduh PDF Hasil Merge", data=buf, file_name="merged.pdf", mime="application/pdf")
+
 
