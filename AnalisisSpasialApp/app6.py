@@ -62,7 +62,7 @@ if uploaded_file:
     # Render halaman diperkecil/lebih besar dari thumbnail
     try:
         page = pdf_doc[page_num - 1]
-        pix = page.get_pixmap(matrix=fitz.Matrix(0.8, 0.8))  # sedikit lebih besar dari thumbnail
+        pix = page.get_pixmap(matrix=fitz.Matrix(0.6, 0.6))  # sedikit lebih besar dari thumbnail
         img = Image.open(io.BytesIO(pix.tobytes("png")))
         st.image(img, caption=f"Halaman {page_num}", use_column_width=True)
     except Exception as e:
@@ -130,3 +130,4 @@ if uploaded_file:
 
 else:
     st.info("Silakan upload PDF untuk memulai preview dan split.")
+
