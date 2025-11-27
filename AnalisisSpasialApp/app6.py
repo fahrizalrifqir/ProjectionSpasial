@@ -96,21 +96,26 @@ if uploaded_file:
         # ---------- COMPRESS PDF ----------
         st.subheader("🗜 Compress PDF (perkiraan ukuran file)")
 
+        # Scale & JPEG quality untuk tiap level
         quality_map = {
-            "Sangat Rendah": 0.2,
-            "Rendah": 0.3,
-            "Sedang": 0.5,
-            "Tinggi": 0.8
+            "Sangat Rendah": {"scale":0.5, "jpeg_quality":50},
+            "Rendah": {"scale":0.6, "jpeg_quality":65},
+            "Sedang": {"scale":0.7, "jpeg_quality":80},
+            "Tinggi": {"scale":0.8, "jpeg_quality":90},
         }
+
         compressed_files = {}
-        for q, scale in quality_map.items():
+        for q, settings in quality_map.items():
+            scale = settings["scale"]
+            jpeg_q = settings["jpeg_quality"]
             images = []
             for page in pdf_doc:
                 pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
                 img = Image.open(io.BytesIO(pix.tobytes("png")))
                 img_byte_arr = io.BytesIO()
-                img.save(img_byte_arr, format='PNG')
+                img.save(img_byte_arr, format='JPEG', quality=jpeg_q)
                 images.append(img_byte_arr.getvalue())
+
             pdf_buffer = io.BytesIO()
             pdf_buffer.write(img2pdf.convert(images))
             pdf_buffer.seek(0)
