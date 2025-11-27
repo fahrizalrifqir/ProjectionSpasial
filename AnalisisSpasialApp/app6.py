@@ -97,7 +97,7 @@ if fitur in ["Split PDF", "Compress PDF"]:
                             col.download_button(f"⬇️ {name}", data=buf, file_name=name, mime="application/pdf", key=f"split_{i+j}")
 
             elif fitur == "Compress PDF":
-                st.subheader("🗜 Compress PDF (perkiraan ukuran file + download)")
+                st.subheader("🗜 Compress PDF ")
                 if "compressed_files" not in st.session_state:
                     st.session_state["compressed_files"] = {}
 
@@ -168,5 +168,6 @@ elif fitur=="Merge PDF":
                 merger.write(buf)
                 buf.seek(0)
                 st.download_button("⬇️ Unduh PDF Hasil Merge", data=buf, file_name="merged.pdf", mime="application/pdf")
+
 
 
