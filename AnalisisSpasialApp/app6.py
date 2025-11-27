@@ -121,11 +121,12 @@ if uploaded_file:
             pdf_buffer.seek(0)
             compressed_files[q] = pdf_buffer
 
-        st.write("Perkiraan ukuran file setelah compress:")
+        st.write("compress:")
         for q, buf in compressed_files.items():
             size_kb = len(buf.getbuffer()) / 1024
             st.write(f"- {q}: {size_kb:.2f} KB")
-            st.download_button(f"⬇️ Unduh PDF {q}", data=buf, file_name=f"{pdf_name}_compressed_{q}.pdf", mime="application/pdf", key=f"comp_{q}")
+            st.download_button(f"⬇️ Unduh PDF {q}", data=buf, file_name=f"{pdf_name}_compressed_{q}.pdf", mime="application/pdf", key=f"comp_{q} {size_kb:.2f} KB ")
 
 else:
     st.info("Silakan upload PDF untuk memulai preview, split, dan compress.")
+
