@@ -25,9 +25,19 @@ if uploaded_file is not None:
         st.session_state["split_results"] = []
         st.session_state["last_uploaded"] = uploaded_file.name
 
-    # PyPDF2 membaca PDF
-    reader = PdfReader(uploaded_file)
-    total_pages = len(reader.pages)
+    # Baca dengan PyPDF2
+    try:
+        reader = PdfReader(uploaded_file)
+        total_pages = len(reader.pages)
+    except:
+        st.error("❌ Gagal membaca PDF. File mungkin corrupt atau terenkripsi.")
+        st.stop()
+
+    # Jika PDF tanpa halaman → hentikan
+    if total_pages < 1:
+        st.error("❌ PDF tidak memiliki halaman atau tidak bisa dibaca.")
+        st.stop()
+
     st.success(f"File terbaca: **{uploaded_file.name}** dengan {total_pages} halaman.")
 
     # ===========================================================
@@ -40,6 +50,7 @@ if uploaded_file is not None:
         horizontal=True
     )
 
+    # Baca ulang PDF untuk preview (aman menggunakan getvalue)
     pdf_bytes = uploaded_file.getvalue()
     pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
 
@@ -52,7 +63,6 @@ if uploaded_file is not None:
             try:
                 pix = pdf_doc[i].get_pixmap(matrix=fitz.Matrix(0.4, 0.4))
                 img_bytes = pix.tobytes("png")
-
                 with cols[i % 3]:
                     st.image(img_bytes, caption=f"Halaman {i+1}")
             except:
@@ -62,21 +72,31 @@ if uploaded_file is not None:
     #                📄 MODE 2: SLIDER PER HALAMAN
     # ===========================================================
     if mode == "Single Page Slider":
-        page_num = st.slider("Pilih halaman:", 1, total_pages, 1)
+        st.write(f"Total halaman: **{total_pages}**")
+
+        page_num = st.slider(
+            "Pilih halaman:",
+            min_value=1,
+            max_value=total_pages,
+            value=1,
+            step=1
+        )
 
         page = pdf_doc[page_num - 1]
-        pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))  # lebih besar
-        img_bytes = pix.tobytes("png")
-
-        st.image(img_bytes, caption=f"Halaman {page_num}", use_container_width=True)
+        pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
+        st.image(pix.tobytes("png"), caption=f"Halaman {page_num}", use_container_width=True)
 
     # ===========================================================
-
+    #                     INPUT RENTANG SPLIT
+    # ===========================================================
     rentang_input = st.text_input(
         "Masukkan rentang halaman (contoh: 1-1,2-12)",
         value=f"1-1,2-{total_pages}"
     )
 
+    # ===========================================================
+    #                     PROSES SPLIT
+    # ===========================================================
     if st.button("🔪 Split Sekarang"):
         try:
             splits = []
@@ -91,7 +111,7 @@ if uploaded_file is not None:
             for idx, (start, end) in enumerate(splits):
                 writer = PdfWriter()
                 for i in range(start - 1, end):
-                    if i < total_pages:
+                    if 0 <= i < total_pages:
                         writer.add_page(reader.pages[i])
 
                 buffer = io.BytesIO()
@@ -111,7 +131,9 @@ if uploaded_file is not None:
         except Exception as e:
             st.error(f"Terjadi kesalahan: {e}")
 
-    # ====== DOWNLOAD HASIL ======
+    # ===========================================================
+    #                     DOWNLOAD HASIL
+    # ===========================================================
     if st.session_state.get("split_results"):
         for name, buf in st.session_state["split_results"]:
             st.download_button(
