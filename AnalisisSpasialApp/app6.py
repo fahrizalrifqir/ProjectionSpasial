@@ -135,20 +135,19 @@ if uploaded_file:
 
         # --------------------- COMPRESS PDF ---------------------
         st.subheader("🗜 Compress PDF")
-        if st.button("Compress PDF"):
-            try:
-                compressed_file_name = f"compressed_{uploaded_file.name}"
-                with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
-                    pdf.save(compressed_file_name, optimize_streams=True, compress_streams=True)
-                with open(compressed_file_name, "rb") as f:
-                    st.download_button(
-                        "⬇️ Unduh PDF Terkompres",
-                        data=f,
-                        file_name=compressed_file_name,
-                        mime="application/pdf"
-                    )
-            except Exception as e:
-                st.error(f"Gagal kompres PDF: {e}")
+if st.button("Compress PDF"):
+    try:
+        compressed_file_name = f"compressed_{uploaded_file.name}"
+        with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
+            pdf.save(compressed_file_name)  # tanpa optimize_streams
+        with open(compressed_file_name, "rb") as f:
+            st.download_button(
+                "⬇️ Unduh PDF Terkompres",
+                data=f,
+                file_name=compressed_file_name,
+                mime="application/pdf"
+            )
+    except Exception as e:
+        st.error(f"Gagal kompres PDF: {e}")
 
-else:
-    st.info("Silakan upload PDF untuk memulai preview, split, dan compress.")
+
