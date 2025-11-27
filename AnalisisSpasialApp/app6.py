@@ -96,7 +96,12 @@ if uploaded_file:
         # ---------- COMPRESS PDF ----------
         st.subheader("🗜 Compress PDF (perkiraan ukuran file)")
 
-        quality_map = {"Rendah":0.3, "Sedang":0.5, "Tinggi":0.8}
+        quality_map = {
+            "Sangat Rendah": 0.2,
+            "Rendah": 0.3,
+            "Sedang": 0.5,
+            "Tinggi": 0.8
+        }
         compressed_files = {}
         for q, scale in quality_map.items():
             images = []
