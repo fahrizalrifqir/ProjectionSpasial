@@ -65,7 +65,7 @@ if uploaded_file:
 
         try:
             page = pdf_doc[page_num - 1]
-            pix = page.get_pixmap(matrix=fitz.Matrix(0.9, 0.9))  # ukuran preview lebih kecil
+            pix = page.get_pixmap(matrix=fitz.Matrix(1.0, 1.0))  # ukuran preview lebih kecil
             img = Image.open(io.BytesIO(pix.tobytes("png")))
             st.image(img, caption=f"Halaman {page_num}", use_column_width=True)
         except Exception as e:
@@ -132,6 +132,7 @@ if uploaded_file:
 
 else:
     st.info("Silakan upload PDF untuk memulai preview dan split.")
+
 
 
 
