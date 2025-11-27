@@ -1,6 +1,6 @@
 import streamlit as st
 from PyPDF2 import PdfReader, PdfWriter
-import fitz  # PyMuPDF untuk render preview
+import fitz  # PyMuPDF
 import io, os
 
 st.set_page_config(page_title="PDF Splitter (Fleksibel)", page_icon="📄", layout="centered")
@@ -25,30 +25,50 @@ if uploaded_file is not None:
         st.session_state["split_results"] = []
         st.session_state["last_uploaded"] = uploaded_file.name
 
-    # PyPDF2 membaca langsung dari uploaded_file
+    # PyPDF2 membaca PDF
     reader = PdfReader(uploaded_file)
     total_pages = len(reader.pages)
     st.success(f"File terbaca: **{uploaded_file.name}** dengan {total_pages} halaman.")
 
     # ===========================================================
-    #                     🔍 PREVIEW HALAMAN PDF
+    #                🔍 PREVIEW MODE SELECTOR
     # ===========================================================
-    st.subheader("🔍 Preview Halaman PDF")
+    st.subheader("🔍 Preview PDF")
+    mode = st.radio(
+        "Pilih mode preview:",
+        ["Thumbnail Grid", "Single Page Slider"],
+        horizontal=True
+    )
 
-    pdf_bytes = uploaded_file.getvalue()  # ⭐ Tidak mengubah pointer file
+    pdf_bytes = uploaded_file.getvalue()
     pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
 
-    cols = st.columns(3)
-    for i in range(len(pdf_doc)):
-        try:
-            pix = pdf_doc[i].get_pixmap(matrix=fitz.Matrix(0.4, 0.4))  # resize thumbnail
-            img_bytes = pix.tobytes("png")
+    # ===========================================================
+    #                 🖼️ MODE 1: THUMBNAIL GRID
+    # ===========================================================
+    if mode == "Thumbnail Grid":
+        cols = st.columns(3)
+        for i in range(len(pdf_doc)):
+            try:
+                pix = pdf_doc[i].get_pixmap(matrix=fitz.Matrix(0.4, 0.4))
+                img_bytes = pix.tobytes("png")
 
-            with cols[i % 3]:
-                st.image(img_bytes, caption=f"Halaman {i+1}")
+                with cols[i % 3]:
+                    st.image(img_bytes, caption=f"Halaman {i+1}")
+            except:
+                st.warning(f"Gagal memuat halaman {i+1}")
 
-        except Exception as e:
-            st.error(f"Gagal render halaman {i+1}: {e}")
+    # ===========================================================
+    #                📄 MODE 2: SLIDER PER HALAMAN
+    # ===========================================================
+    if mode == "Single Page Slider":
+        page_num = st.slider("Pilih halaman:", 1, total_pages, 1)
+
+        page = pdf_doc[page_num - 1]
+        pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))  # lebih besar
+        img_bytes = pix.tobytes("png")
+
+        st.image(img_bytes, caption=f"Halaman {page_num}", use_container_width=True)
 
     # ===========================================================
 
