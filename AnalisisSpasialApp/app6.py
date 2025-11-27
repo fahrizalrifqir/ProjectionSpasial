@@ -44,7 +44,7 @@ if fitur in ["Split PDF", "Compress PDF"]:
             page_num = st.slider("Pilih halaman:", 1, total_pages, 1)
             try:
                 page = pdf_doc[page_num - 1]
-                pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
+                pix = page.get_pixmap(matrix=fitz.Matrix(0.8, 0.8))
                 img = Image.open(io.BytesIO(pix.tobytes("png")))
                 st.image(img, caption=f"Halaman {page_num}", use_column_width=True)
             except Exception as e:
@@ -87,7 +87,7 @@ if fitur in ["Split PDF", "Compress PDF"]:
                     except Exception as e:
                         st.error(f"Error split: {e}")
 
-                # Download split
+                # Tombol download split (2 kolom)
                 split_files = st.session_state.get("split_results", [])
                 for i in range(0,len(split_files),2):
                     cols = st.columns(2)
@@ -125,7 +125,7 @@ if fitur in ["Split PDF", "Compress PDF"]:
                         st.session_state["compressed_files"][q] = pdf_buffer
                     st.success("✅ Compress selesai!")
 
-                # Download compress
+                # Tombol download compress (2 kolom)
                 compressed_files = list(st.session_state.get("compressed_files", {}).items())
                 for i in range(0,len(compressed_files),2):
                     cols = st.columns(2)
@@ -149,12 +149,22 @@ elif fitur=="Merge PDF":
         if len(uploaded_merge_files)>5:
             st.error("❌ Maksimal 5 file untuk merge!")
         else:
+            st.subheader("Atur urutan file PDF sebelum merge")
+            file_names = [f.name for f in uploaded_merge_files]
+            urutan = []
+            for i, fname in enumerate(file_names):
+                order = st.number_input(f"Urutan '{fname}'", min_value=1, max_value=len(file_names), value=i+1, step=1, key=f"order_{i}")
+                urutan.append((order, i))
+            
+            # Sort file sesuai urutan
+            urutan.sort(key=lambda x: x[0])
+            sorted_files = [uploaded_merge_files[i] for _,i in urutan]
+
             if st.button("🔗 Merge PDF"):
                 merger = PdfMerger()
-                for f in uploaded_merge_files:
+                for f in sorted_files:
                     merger.append(f)
                 buf = io.BytesIO()
                 merger.write(buf)
                 buf.seek(0)
                 st.download_button("⬇️ Unduh PDF Hasil Merge", data=buf, file_name="merged.pdf", mime="application/pdf")
-
