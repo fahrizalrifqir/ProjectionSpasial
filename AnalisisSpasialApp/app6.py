@@ -1,5 +1,6 @@
 import streamlit as st
 from PyPDF2 import PdfReader, PdfWriter
+import fitz  # PyMuPDF untuk preview halaman
 import io, os
 
 st.set_page_config(page_title="PDF Splitter (Fleksibel)", page_icon="📄", layout="centered")
@@ -11,7 +12,7 @@ st.code("1-1,2-12", language="text")
 # ====== UPLOAD FILE ======
 uploaded_file = st.file_uploader("📤 Upload file PDF", type=["pdf"])
 
-# ====== DETEKSI FILE DIHAPUS (KLIK X) ======
+# ====== DETEKSI FILE DIHAPUS ======
 if uploaded_file is None and "last_uploaded" in st.session_state:
     st.session_state.clear()
 
@@ -27,6 +28,29 @@ if uploaded_file is not None:
     reader = PdfReader(uploaded_file)
     total_pages = len(reader.pages)
     st.success(f"File terbaca: **{uploaded_file.name}** dengan {total_pages} halaman.")
+
+    # ===========================================================
+    #                🔍 PREVIEW PDF PERTI HALAMAN
+    # ===========================================================
+    st.subheader("🔍 Preview Halaman PDF")
+
+    pdf_bytes = uploaded_file.read()
+    uploaded_file.seek(0)  # reset posisi baca file
+
+    pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+
+    cols = st.columns(3)
+    for i in range(total_pages):
+        pix = pdf_doc[i].get_pixmap(matrix=fitz.Matrix(0.4, 0.4))  # scale untuk ukuran preview
+        img_bytes = pix.tobytes("png")
+
+        with cols[i % 3]:
+            st.image(img_bytes, caption=f"Halaman {i+1}")
+
+    # Kembalikan pointer file untuk PyPDF2
+    uploaded_file.seek(0)
+
+    # ===========================================================
 
     rentang_input = st.text_input(
         "Masukkan rentang halaman (contoh: 1-1,2-12)",
