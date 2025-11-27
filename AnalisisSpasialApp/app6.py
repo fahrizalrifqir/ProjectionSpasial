@@ -3,13 +3,10 @@ from PyPDF2 import PdfReader, PdfWriter
 import fitz  # PyMuPDF
 import io, os
 from PIL import Image
-import pikepdf
 
 st.set_page_config(page_title="PDF Tools", page_icon="📄", layout="wide")
-
 st.title("📄 PDF Tools: Preview + Split + Compress")
-st.write("Unggah PDF, lihat preview halaman, split berdasarkan rentang, dan compress PDF.")
-st.code("Contoh rentang split: 1-2,3-5", language="text")
+st.write("Unggah PDF, lihat preview halaman, split PDF, dan compress PDF dengan pilihan kualitas.")
 
 # ===================== UPLOAD FILE ======================
 uploaded_file = st.file_uploader("📤 Upload file PDF", type=["pdf"])
@@ -27,11 +24,7 @@ if uploaded_file:
         total_pages = len(pdf_reader.pages)
         pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     except:
-        st.error("❌ Gagal membaca PDF. File mungkin corrupt atau terenkripsi.")
-        st.stop()
-
-    if total_pages < 1:
-        st.error("PDF tidak memiliki halaman atau tidak bisa dibaca.")
+        st.error("❌ Gagal membaca PDF.")
         st.stop()
 
     st.success(f"File terbaca: **{uploaded_file.name}** dengan {total_pages} halaman.")
@@ -42,50 +35,25 @@ if uploaded_file:
     # --------------------- KOLOM KIRI: PREVIEW ---------------------
     with col1:
         st.subheader("🔹 Preview Halaman PDF")
-        st.write("Gunakan slider untuk memilih halaman yang ingin dilihat.")
-
-        if total_pages == 1:
-            page_num = st.slider(
-                "Pilih halaman:",
-                min_value=1,
-                max_value=2,
-                value=1,
-                step=1,
-                help="PDF ini hanya memiliki 1 halaman."
-            )
-            page_num = 1
-        else:
-            page_num = st.slider(
-                "Pilih halaman:",
-                min_value=1,
-                max_value=total_pages,
-                value=1,
-                step=1
-            )
-
-        # Render halaman dengan kualitas lebih tinggi (preview lebih jelas)
+        page_num = st.slider("Pilih halaman:", min_value=1, max_value=total_pages, value=1, step=1)
         try:
             page = pdf_doc[page_num - 1]
-            pix = page.get_pixmap(matrix=fitz.Matrix(0.8, 0.8))
+            pix = page.get_pixmap(matrix=fitz.Matrix(0.8, 0.8))  # preview cukup jelas
             img = Image.open(io.BytesIO(pix.tobytes("png")))
             st.image(img, caption=f"Halaman {page_num}", use_column_width=True)
         except Exception as e:
-            st.error(f"Gagal menampilkan preview halaman: {e}")
+            st.error(f"Gagal menampilkan preview: {e}")
 
     # --------------------- KOLOM KANAN: SPLIT & COMPRESS ---------------------
     with col2:
-        st.subheader("✂️ Split PDF Berdasarkan Rentang Halaman")
+        st.subheader("✂️ Split PDF")
         default_range = f"1-2,3-{total_pages}" if total_pages > 2 else "1-1"
-        rentang_input = st.text_input(
-            "Masukkan rentang halaman (contoh: 1-2,3-5):",
-            value=default_range
-        )
+        rentang_input = st.text_input("Masukkan rentang halaman (contoh: 1-2,3-5):", value=default_range)
 
         if "last_uploaded" not in st.session_state or st.session_state["last_uploaded"] != uploaded_file.name:
             st.session_state["split_results"] = []
             st.session_state["last_uploaded"] = uploaded_file.name
 
-        # SPLIT PDF
         if st.button("🔪 Split Sekarang"):
             try:
                 splits = []
@@ -107,48 +75,51 @@ if uploaded_file:
                     writer.write(buf)
                     buf.seek(0)
 
-                    if idx == 0:
-                        file_name = f"{pdf_name}.pdf"
-                    else:
-                        file_name = f"RPD_{pdf_name}_hal_{start}_sampai_{end}.pdf"
-
+                    file_name = f"{pdf_name}.pdf" if idx==0 else f"RPD_{pdf_name}_hal_{start}_sampai_{end}.pdf"
                     output_files.append((file_name, buf))
 
                 st.session_state["split_results"] = output_files
-                st.success("✅ Split berhasil! Silakan unduh di bawah ini:")
-
+                st.success("✅ Split berhasil!")
             except Exception as e:
-                st.error(f"Terjadi kesalahan saat split: {e}")
+                st.error(f"Error split: {e}")
 
-        # DOWNLOAD HASIL SPLIT
+        # Download hasil split
         if st.session_state.get("split_results"):
             for name, buf in st.session_state["split_results"]:
-                st.download_button(
-                    f"⬇️ Unduh {name}",
-                    data=buf,
-                    file_name=name,
-                    mime="application/pdf",
-                    key=name
-                )
+                st.download_button(f"⬇️ Unduh {name}", data=buf, file_name=name, mime="application/pdf", key=name)
 
         st.markdown("---")
-
-        # --------------------- COMPRESS PDF ---------------------
         st.subheader("🗜 Compress PDF")
+        quality = st.selectbox("Pilih kualitas compress:", ["Rendah", "Sedang", "Tinggi"])
+
+        # Set scale sesuai kualitas
+        if quality=="Rendah":
+            scale = 0.3
+        elif quality=="Sedang":
+            scale = 0.5
+        else:
+            scale = 0.8
+
         if st.button("Compress PDF"):
             try:
-                compressed_file_name = f"compressed_{uploaded_file.name}"
-                with pikepdf.open(io.BytesIO(pdf_bytes)) as pdf:
-                    pdf.save(compressed_file_name)  # compatible dengan pikepdf terbaru
+                new_pdf = fitz.open()
+                size_preview = []
+                for page in pdf_doc:
+                    pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
+                    img_pdf = fitz.open("pdf", pix.tobytes("pdf"))
+                    new_pdf.insert_pdf(img_pdf)
+                compressed_file_name = f"{pdf_name}_compressed_{quality}.pdf"
+                new_pdf.save(compressed_file_name)
+
+                # Tampilkan ukuran file
+                file_size = os.path.getsize(compressed_file_name)/1024  # KB
+                st.write(f"Ukuran file setelah compress ({quality}): {file_size:.2f} KB")
+
                 with open(compressed_file_name, "rb") as f:
-                    st.download_button(
-                        "⬇️ Unduh PDF Terkompres",
-                        data=f,
-                        file_name=compressed_file_name,
-                        mime="application/pdf"
-                    )
+                    st.download_button("⬇️ Unduh PDF Terkompres", data=f, file_name=compressed_file_name, mime="application/pdf")
+
             except Exception as e:
-                st.error(f"Gagal kompres PDF: {e}")
+                st.error(f"Gagal compress PDF: {e}")
 
 else:
     st.info("Silakan upload PDF untuk memulai preview, split, dan compress.")
